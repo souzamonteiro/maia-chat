@@ -1,0 +1,9 @@
+# On the office/client machine, Node may listen only on the WireGuard IP
+# rather than 0.0.0.0. Example .env:
+#
+# HOST=10.20.0.2
+# PORT=3080
+#
+# Then allow the port only through wg0:
+#
+# sudo ufw allow in on wg0 to any port 3080 proto tcp

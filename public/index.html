@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111111">
+  <title>Maia</title>
+  <link rel="stylesheet" href="/css/maia.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">M</div>
+        <div>
+          <strong>Maia</strong>
+          <small>Open intelligence</small>
+        </div>
+      </div>
+
+      <button class="new-chat" id="newChatButton" type="button">+ New chat</button>
+
+      <div class="conversation-list" id="conversationList"></div>
+
+      <div class="sidebar-footer">
+        <label for="modelSelect">Model</label>
+        <select id="modelSelect"></select>
+        <div class="status">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Checking server…</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="menu-button" id="menuButton" type="button" aria-label="Toggle menu">☰</button>
+        <div>
+          <strong id="pageTitle">Maia</strong>
+          <span id="modelBadge">Local AI</span>
+        </div>
+        <button class="clear-button" id="clearButton" type="button">Clear</button>
+      </header>
+
+      <section class="chat" id="chat">
+        <div class="welcome" id="welcome">
+          <div class="welcome-mark">M</div>
+          <h1>How can I help you?</h1>
+          <p>Maia is an open interface for local and independent language models.</p>
+        </div>
+      </section>
+
+      <form class="composer" id="composer">
+        <div class="composer-box">
+          <textarea
+            id="prompt"
+            rows="1"
+            placeholder="Ask Maia…"
+            aria-label="Message"
+          ></textarea>
+          <div class="composer-actions">
+            <span class="hint">Enter to send · Shift+Enter for a new line</span>
+            <button class="stop-button hidden" id="stopButton" type="button">Stop</button>
+            <button class="send-button" id="sendButton" type="submit">Send</button>
+          </div>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
