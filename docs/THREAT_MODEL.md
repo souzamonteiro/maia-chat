@@ -59,7 +59,8 @@ Controls:
 
 - `/api/metrics` is separate from external API authentication and requires
   `MAIA_METRICS_TOKEN`; it returns `404` when disabled or unauthorized.
-- Liveness is intentionally minimal. Readiness reports model availability for
+- Liveness and the public health summary are intentionally minimal. Detailed
+  readiness requires `MAIA_OPERATIONS_TOKEN` and reports model availability for
   orchestration.
 - Request IDs, structured logs, and metrics omit prompts, completions,
   attachment text, authorization headers, and bearer tokens.

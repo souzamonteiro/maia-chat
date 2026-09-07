@@ -28,9 +28,11 @@ const models = {
   ]
 };
 
-async function mockApi(page) {
+async function mockApi(page, { webSearchEnabled = false } = {}) {
   await page.route('**/api/config', (route) =>
-    route.fulfill({ json: { name: 'Maia', version: '0.1.0', defaultModel: 'qwen2.5:3b' } })
+    route.fulfill({
+      json: { name: 'Maia', version: '0.1.0', defaultModel: 'qwen2.5:3b', webSearchEnabled }
+    })
   );
   await page.route('**/api/models', (route) => route.fulfill({ json: models }));
   await page.route('**/api/health', (route) =>
@@ -111,6 +113,115 @@ test('keyboard users can add a line, send a message, and stop generation', async
   await page.locator('#stopButton').focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('.message-recovery').getByText('Generation stopped')).toBeVisible();
+});
+
+test('attached documents send retrieved chunks with citation instructions', async ({ page }) => {
+  await mockApi(page);
+  let requestBody;
+  await page.route('**/api/chat/completions', (route) => {
+    requestBody = route.request().postDataJSON();
+    return route.fulfill({
+      contentType: 'text/event-stream; charset=utf-8',
+      body:
+        'data: {"choices":[{"delta":{"role":"assistant","content":"Tuesday"},"finish_reason":null}]}\n\n' +
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
+        'data: [DONE]\n\n'
+    });
+  });
+  await page.goto('/');
+  await page.locator('#attachmentInput').setInputFiles({
+    name: 'roadmap.md',
+    mimeType: 'text/markdown',
+    buffer: Buffer.from('# Roadmap\n\nThe release target is Tuesday.')
+  });
+  await page.locator('#prompt').fill('What is the release target?');
+  await page.locator('#sendButton').click();
+
+  await expect(page.locator('.message.assistant .message-content')).toContainText('Tuesday');
+  const content = requestBody.messages.at(-1).content;
+  expect(content).toContain('[Retrieved source: roadmap.md, chunk 1/1]');
+  expect(content).toContain('Cite documents as [file name, chunk n/total]');
+});
+
+test('saved local collections persist and supply retrieved context', async ({ page }) => {
+  await mockApi(page);
+  let requestBody;
+  await page.route('**/api/chat/completions', (route) => {
+    requestBody = route.request().postDataJSON();
+    return route.fulfill({
+      contentType: 'text/event-stream; charset=utf-8',
+      body:
+        'data: {"choices":[{"delta":{"role":"assistant","content":"Tuesday"},"finish_reason":null}]}\n\n' +
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
+        'data: [DONE]\n\n'
+    });
+  });
+  await page.goto('/');
+  page.once('dialog', (dialog) => dialog.accept('Release notes'));
+  await page.locator('#newCollectionButton').click();
+  await expect(page.locator('#collectionSelect')).toHaveValue(/.+/);
+  await page.locator('#collectionDocumentInput').setInputFiles({
+    name: 'release.md',
+    mimeType: 'text/markdown',
+    buffer: Buffer.from('# Release\n\nThe launch date is Tuesday.')
+  });
+  await expect(page.locator('#collectionDocumentList')).toContainText('release.md');
+
+  await page.reload();
+  await expect(page.locator('#collectionDocumentList')).toContainText('release.md');
+  await page.locator('#prompt').fill('What is the launch date?');
+  await page.locator('#sendButton').click();
+  await expect(page.locator('.message.assistant .message-content')).toContainText('Tuesday');
+  expect(requestBody.messages.at(-1).content).toContain(
+    '[Retrieved source: release.md, chunk 1/1]'
+  );
+});
+
+test('web search selects a source and sends it as citable context', async ({ page }) => {
+  await mockApi(page, { webSearchEnabled: true });
+  let requestBody;
+  await page.route('**/api/search**', (route) =>
+    route.fulfill({
+      json: {
+        object: 'list',
+        data: [
+          {
+            title: 'Maia release notes',
+            url: 'https://example.test/releases',
+            snippet: 'The release date is Tuesday.',
+            engine: 'example'
+          }
+        ]
+      }
+    })
+  );
+  await page.route('**/api/chat/completions', (route) => {
+    requestBody = route.request().postDataJSON();
+    return route.fulfill({
+      contentType: 'text/event-stream; charset=utf-8',
+      body:
+        'data: {"choices":[{"delta":{"role":"assistant","content":"Tuesday"},"finish_reason":null}]}\n\n' +
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
+        'data: [DONE]\n\n'
+    });
+  });
+  await page.goto('/');
+  await expect(page.locator('#webSearch')).toBeVisible();
+  await page.locator('#webSearchQuery').fill('Maia release date');
+  await page.locator('#webSearchButton').click();
+  await page.locator('.web-search-result input[type="checkbox"]').check();
+  await page.locator('#prompt').fill('When is the release date?');
+  await page.locator('#sendButton').click();
+
+  await expect(page.locator('.message.assistant .message-content')).toContainText('Tuesday');
+  const content = requestBody.messages.at(-1).content;
+  expect(content).toContain('[Web source: Maia release notes]');
+  expect(content).toContain('URL: https://example.test/releases');
+  expect(content).toContain('web sources as [Web source: title]');
+  await expect(page.locator('.message.user .web-sources a')).toHaveAttribute(
+    'href',
+    'https://example.test/releases'
+  );
 });
 
 test('failed streaming response preserves partial output and offers Retry', async ({ page }) => {

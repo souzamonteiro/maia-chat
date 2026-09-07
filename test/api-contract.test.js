@@ -37,6 +37,18 @@ async function startMockOllama({ holdStream = false } = {}) {
       response.setHeader('Content-Type', 'application/json');
       return response.end(JSON.stringify({ models: [] }));
     }
+    if (request.url === '/api/embed') {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      response.setHeader('Content-Type', 'application/json');
+      return response.end(
+        JSON.stringify({
+          model: body.model,
+          embeddings: body.input.map((_, index) => [index + 0.1, index + 0.2])
+        })
+      );
+    }
     if (request.url === '/api/chat') {
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
@@ -46,7 +58,12 @@ async function startMockOllama({ holdStream = false } = {}) {
         return response.end(
           JSON.stringify({
             model: 'mock:latest',
-            message: { content: 'Hello' },
+            message: body.tools
+              ? {
+                  content: '',
+                  tool_calls: [{ function: { name: body.tools[0].function.name, arguments: {} } }]
+                }
+              : { content: 'Hello' },
             done: true,
             prompt_eval_count: 3,
             eval_count: 1,
@@ -82,6 +99,34 @@ async function startMockOllama({ holdStream = false } = {}) {
       server.closeAllConnections();
       return new Promise((resolve) => server.close(resolve));
     }
+  };
+}
+
+async function startMockSearxng() {
+  const server = http.createServer((request, response) => {
+    const url = new URL(request.url, 'http://127.0.0.1');
+    if (url.pathname !== '/search' || url.searchParams.get('format') !== 'json') {
+      response.statusCode = 404;
+      return response.end();
+    }
+    response.setHeader('Content-Type', 'application/json');
+    return response.end(
+      JSON.stringify({
+        results: [
+          {
+            title: 'Maia Search',
+            url: 'https://example.test/search',
+            content: `Results for ${url.searchParams.get('q')}`,
+            engine: 'example'
+          }
+        ]
+      })
+    );
+  });
+  const port = await listen(server);
+  return {
+    url: `http://127.0.0.1:${port}`,
+    close: () => new Promise((resolve) => server.close(resolve))
   };
 }
 
@@ -202,6 +247,22 @@ test('OpenAI-compatible API contract returns models, completions, and SSE chunks
     assert.match(stream, /"object":"chat.completion.chunk"/);
     assert.match(stream, /"finish_reason":"stop"/);
     assert.match(stream, /data: \[DONE\]/);
+
+    const embeddingsResponse = await fetch(`http://127.0.0.1:${port}/v1/embeddings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'mock:latest', input: ['first', 'second'] })
+    });
+    assert.equal(embeddingsResponse.status, 200);
+    assert.deepEqual(await embeddingsResponse.json(), {
+      object: 'list',
+      data: [
+        { object: 'embedding', embedding: [0.1, 0.2], index: 0 },
+        { object: 'embedding', embedding: [1.1, 1.2], index: 1 }
+      ],
+      model: 'mock:latest',
+      usage: { prompt_tokens: 0, total_tokens: 0 }
+    });
   } finally {
     await stop(maia);
     await mock.close();
@@ -218,6 +279,19 @@ test('OpenAI-compatible API rejects a blacklisted model before starting an SSE s
   });
 
   try {
+    const denied = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'mock:latest',
+        stream: true,
+        messages: [{ role: 'user', content: 'Run this command' }],
+        tools: [{ type: 'function', function: { name: 'shell', parameters: {} } }]
+      })
+    });
+    assert.equal(denied.status, 403);
+    assert.equal((await denied.json()).error.code, 'tool_not_allowed');
+
     const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -235,6 +309,121 @@ test('OpenAI-compatible API rejects a blacklisted model before starting an SSE s
         type: 'permission_error',
         code: 'model_disabled'
       }
+    });
+  } finally {
+    await stop(maia);
+    await mock.close();
+  }
+});
+
+test('web search returns normalized SearXNG sources only when configured', async () => {
+  const ollama = await startMockOllama();
+  const search = await startMockSearxng();
+  const port = await reservePort();
+  const maia = await startMaia({
+    port,
+    ollamaUrl: ollama.url,
+    environment: {
+      MAIA_SEARCH_PROVIDER: 'searxng',
+      MAIA_SEARXNG_URL: search.url
+    }
+  });
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/search?q=Maia&language=pt`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      object: 'list',
+      data: [
+        {
+          title: 'Maia Search',
+          url: 'https://example.test/search',
+          snippet: 'Results for Maia',
+          engine: 'example'
+        }
+      ]
+    });
+  } finally {
+    await stop(maia);
+    await ollama.close();
+    await search.close();
+  }
+});
+
+test('OpenAI-compatible API forwards allowlisted function tools without executing them', async () => {
+  const mock = await startMockOllama();
+  const port = await reservePort();
+  const maia = await startMaia({
+    port,
+    ollamaUrl: mock.url,
+    environment: { MAIA_TOOL_ALLOWLIST: '["calculator"]' }
+  });
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'mock:latest',
+        stream: false,
+        messages: [{ role: 'user', content: 'What is 2 + 2?' }],
+        tools: [{ type: 'function', function: { name: 'calculator', parameters: {} } }]
+      })
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).choices[0], {
+      index: 0,
+      message: {
+        role: 'assistant',
+        content: '',
+        tool_calls: [{ function: { name: 'calculator', arguments: {} } }]
+      },
+      finish_reason: 'tool_calls'
+    });
+  } finally {
+    await stop(maia);
+    await mock.close();
+  }
+});
+
+test('operational readiness requires its own token while public health omits model IDs', async () => {
+  const mock = await startMockOllama();
+  const port = await reservePort();
+  const maia = await startMaia({
+    port,
+    ollamaUrl: mock.url,
+    environment: { MAIA_OPERATIONS_TOKEN: 'operations-secret' }
+  });
+
+  try {
+    const publicHealth = await fetch(`http://127.0.0.1:${port}/api/health`);
+    assert.equal(publicHealth.status, 200);
+    assert.deepEqual(await publicHealth.json(), {
+      status: 'ok',
+      service: 'maia-chat',
+      ollama: true,
+      modelsCount: 1
+    });
+
+    for (const authorization of ['', 'Bearer invalid-token']) {
+      const response = await fetch(`http://127.0.0.1:${port}/api/health/ready`, {
+        headers: authorization ? { authorization } : {}
+      });
+      assert.equal(response.status, 404);
+    }
+
+    const readiness = await fetch(`http://127.0.0.1:${port}/api/health/ready`, {
+      headers: { authorization: 'Bearer operations-secret' }
+    });
+    assert.equal(readiness.status, 200);
+    assert.deepEqual(await readiness.json(), {
+      status: 'ok',
+      service: 'maia-chat',
+      ollama: true,
+      modelsCount: 1,
+      models: ['mock:latest'],
+      defaultModel: 'mock:latest'
     });
   } finally {
     await stop(maia);

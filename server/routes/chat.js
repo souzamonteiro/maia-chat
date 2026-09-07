@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { ContextOverflowError, errorPayload, ModelDisabledError } from '../errors.js';
 import { estimateInputTokens } from '../context.js';
 import { validateGenerationSettings } from '../generation.js';
+import { validateTools } from '../tools.js';
 import { acquireGeneration, releaseGeneration, validateRequestLimits } from '../limits.js';
 import { isDraining, registerStream, unregisterStream } from '../lifecycle.js';
 import { enforceRateLimit } from '../rate-limit.js';
@@ -45,6 +46,7 @@ chatRouter.post('/', async (req, res, next) => {
 
   validateGenerationSettings(body);
   validateRequestLimits(body);
+  validateTools(body.tools);
   try {
     enforceRateLimit({ ip: req.ip, keyId: req.apiKeyId });
   } catch (error) {
@@ -103,9 +105,10 @@ chatRouter.post('/', async (req, res, next) => {
             index: 0,
             message: {
               role: 'assistant',
-              content: result.content
+              content: result.content,
+              ...((result.toolCalls?.length || 0) > 0 ? { tool_calls: result.toolCalls } : {})
             },
-            finish_reason: result.doneReason
+            finish_reason: result.toolCalls?.length > 0 ? 'tool_calls' : result.doneReason
           }
         ],
         usage: {
@@ -206,8 +209,8 @@ chatRouter.post('/', async (req, res, next) => {
       choices: [
         {
           index: 0,
-          delta: {},
-          finish_reason: 'stop'
+          delta: result.toolCalls?.length > 0 ? { tool_calls: result.toolCalls } : {},
+          finish_reason: result.toolCalls?.length > 0 ? 'tool_calls' : 'stop'
         }
       ]
     };

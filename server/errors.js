@@ -85,6 +85,46 @@ export class RequestLimitError extends AppError {
   }
 }
 
+export class InvalidToolDefinitionError extends AppError {
+  constructor() {
+    super('`tools` must be an array of function tool definitions with non-empty names.', {
+      status: 400,
+      type: 'invalid_request_error',
+      code: 'invalid_tool_definition'
+    });
+  }
+}
+
+export class ToolNotAllowedError extends AppError {
+  constructor(name) {
+    super(`The requested tool is not allowed: ${name}`, {
+      status: 403,
+      type: 'permission_error',
+      code: 'tool_not_allowed'
+    });
+  }
+}
+
+export class SearchDisabledError extends AppError {
+  constructor() {
+    super('Web search is not enabled by this Maia Chat deployment.', {
+      status: 404,
+      type: 'invalid_request_error',
+      code: 'search_disabled'
+    });
+  }
+}
+
+export class SearchUnavailableError extends AppError {
+  constructor() {
+    super('Web search is temporarily unavailable. Please try again shortly.', {
+      status: 503,
+      type: 'service_unavailable_error',
+      code: 'search_unavailable'
+    });
+  }
+}
+
 export class GenerationCapacityError extends AppError {
   constructor() {
     super('Maia is busy generating other responses. Please retry shortly.', {

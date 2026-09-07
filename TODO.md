@@ -104,7 +104,7 @@ Acceptance criteria:
 
 ### 6. Interface and accessibility
 
-- [ ] Create reusable visual states and components instead of ad hoc DOM updates.
+- [x] Create reusable visual states and components instead of ad hoc DOM updates.
 - [x] Add polished empty, loading, offline, and error states.
 - [x] Add a mobile sidebar backdrop and close it with Escape.
 - [x] Restore focus predictably after dialogs and mobile navigation.
@@ -134,7 +134,7 @@ Acceptance criteria:
 - [x] Store only hashed API-key material.
 - [x] Add API-key scopes and optional expiration.
 - [ ] Add authenticated user accounts only after defining the data model and privacy policy.
-- [ ] Protect administrative and operational endpoints separately.
+- [x] Protect administrative and operational endpoints separately.
 
 Acceptance criteria:
 
@@ -206,13 +206,13 @@ Acceptance criteria:
 Start these only after the public-beta and production foundations are complete.
 
 - [x] File upload with explicit file size and type limits.
-- [ ] Document parsing and semantic chunking.
-- [ ] Retrieval-augmented generation with citations.
-- [ ] Saved document collections and retention controls.
-- [ ] Tool and function calling with permission boundaries.
-- [ ] Web search with source attribution.
-- [ ] Embeddings endpoint.
-- [ ] Additional providers such as llama.cpp and vLLM.
+- [x] Document parsing and semantic chunking.
+- [x] Retrieval-augmented generation with citations.
+- [x] Saved document collections and retention controls.
+- [x] Tool and function calling with permission boundaries.
+- [x] Web search with source attribution.
+- [x] Embeddings endpoint.
+- [x] Additional providers such as llama.cpp and vLLM.
 - [ ] Optional encrypted server-side conversation synchronization.
 - [ ] Shared conversations and teams.
 - [ ] Administrative model, usage, and capacity dashboard.

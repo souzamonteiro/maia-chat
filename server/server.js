@@ -9,6 +9,8 @@ import { apiAuth, requireScope } from './middleware/auth.js';
 import { chatRouter } from './routes/chat.js';
 import { healthRouter } from './routes/health.js';
 import { modelsRouter } from './routes/models.js';
+import { embeddingsRouter } from './routes/embeddings.js';
+import { searchRouter } from './routes/search.js';
 import { metricsRouter } from './routes/metrics.js';
 import { warmModel } from './providers/ollama.js';
 import { errorPayload } from './errors.js';
@@ -74,18 +76,21 @@ app.get('/api/config', (_req, res) => {
   res.json({
     name: config.maiaName,
     version: config.version,
-    defaultModel: config.defaultModel
+    defaultModel: config.defaultModel,
+    webSearchEnabled: config.searchProvider === 'searxng'
   });
 });
 
 app.use('/api/health', healthRouter);
 app.use('/api/metrics', metricsRouter);
 app.use('/api/models', modelsRouter);
+app.use('/api/search', searchRouter);
 app.use('/api/chat/completions', chatRouter);
 
 app.use('/v1', apiAuth);
 app.use('/v1/models', requireScope('models'), modelsRouter);
 app.use('/v1/chat/completions', requireScope('chat'), chatRouter);
+app.use('/v1/embeddings', requireScope('embeddings'), embeddingsRouter);
 
 app.use(
   '/vendor/marked',

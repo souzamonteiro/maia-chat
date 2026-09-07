@@ -1,7 +1,20 @@
-import { getConfig, getHealth, getModels, streamChat } from './api.js';
+import { getConfig, getHealth, getModels, searchWeb, streamChat } from './api.js';
 import { conversationStorage } from './storage.js';
 import { contextUsage } from './context.js';
-import { attachmentError, messagePromptContent } from './attachments.js';
+import {
+  attachmentError,
+  messagePromptContent,
+  parseDocument,
+  retrievalPromptContent
+} from './attachments.js';
+import {
+  addDocuments,
+  createCollection,
+  DEFAULT_COLLECTION_ID,
+  ensureCollections,
+  removeCollection,
+  removeDocument
+} from './collections.js';
 import {
   branchConversation,
   clearConversation,
@@ -15,6 +28,7 @@ import {
 } from './conversations.js';
 import { renderMarkdown } from './markdown.js?v=2';
 import { applyTranslations, translate } from './i18n.js?v=2';
+import { createButton, createElement, createRecoveryNotice } from './ui.js?v=1';
 
 const elements = {
   chat: document.querySelector('#chat'),
@@ -47,6 +61,15 @@ const elements = {
   attachmentInput: document.querySelector('#attachmentInput'),
   attachmentList: document.querySelector('#attachmentList'),
   attachmentError: document.querySelector('#attachmentError'),
+  webSearch: document.querySelector('#webSearch'),
+  webSearchQuery: document.querySelector('#webSearchQuery'),
+  webSearchButton: document.querySelector('#webSearchButton'),
+  webSearchResults: document.querySelector('#webSearchResults'),
+  collectionSelect: document.querySelector('#collectionSelect'),
+  newCollectionButton: document.querySelector('#newCollectionButton'),
+  deleteCollectionButton: document.querySelector('#deleteCollectionButton'),
+  collectionDocumentInput: document.querySelector('#collectionDocumentInput'),
+  collectionDocumentList: document.querySelector('#collectionDocumentList'),
   temperatureInput: document.querySelector('#temperatureInput'),
   topPInput: document.querySelector('#topPInput'),
   maxTokensInput: document.querySelector('#maxTokensInput'),
@@ -64,6 +87,9 @@ let activeId = null;
 let currentController = null;
 let modelMetadata = new Map();
 let pendingAttachments = [];
+let pendingWebSources = [];
+let collections = [];
+let selectedCollectionId = DEFAULT_COLLECTION_ID;
 let conversationQuery = '';
 let undoTimeout = null;
 let undoAction = null;
@@ -106,12 +132,17 @@ function activeConversation() {
   return conversations.find((item) => item.id === activeId) || null;
 }
 
+function activeCollection() {
+  return collections.find((collection) => collection.id === selectedCollectionId) || collections[0];
+}
+
 function persist() {
   conversationStorage
     .save({
       conversations,
       activeId,
-      preferences: { theme, expandReasoning, locale, preferredModel }
+      collections,
+      preferences: { theme, expandReasoning, locale, preferredModel, selectedCollectionId }
     })
     .catch(() => {
       setStatus('bad', 'Could not save local history');
@@ -166,16 +197,16 @@ function renderMessageContent(content, source) {
   content.innerHTML = renderMarkdown(source, { expandReasoning });
   for (const code of content.querySelectorAll('pre > code')) {
     const pre = code.parentElement;
-    const copy = document.createElement('button');
-    copy.type = 'button';
-    copy.className = 'code-copy';
-    copy.textContent = t('copyCode');
-    copy.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(code.textContent);
-        copy.textContent = t('copied');
-      } catch {
-        elements.attachmentError.textContent = t('copyCodeFailed');
+    const copy = createButton({
+      className: 'code-copy',
+      label: t('copyCode'),
+      onClick: async () => {
+        try {
+          await navigator.clipboard.writeText(code.textContent);
+          copy.textContent = t('copied');
+        } catch {
+          elements.attachmentError.textContent = t('copyCodeFailed');
+        }
       }
     });
     pre.prepend(copy);
@@ -200,33 +231,86 @@ function renderModelDetails() {
 function renderAttachments() {
   elements.attachmentList.replaceChildren();
   for (const [index, attachment] of pendingAttachments.entries()) {
-    const item = document.createElement('span');
-    item.className = 'attachment-item';
-    item.textContent = attachment.name;
-
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'attachment-remove';
-    remove.textContent = 'x';
-    remove.ariaLabel = `Remove ${attachment.name}`;
-    remove.addEventListener('click', () => {
-      pendingAttachments.splice(index, 1);
-      renderAttachments();
-      renderContextUsage();
+    const item = createElement('span', { className: 'attachment-item', text: attachment.name });
+    const remove = createButton({
+      className: 'attachment-remove',
+      label: 'x',
+      ariaLabel: `Remove ${attachment.name}`,
+      onClick: () => {
+        pendingAttachments.splice(index, 1);
+        renderAttachments();
+        renderContextUsage();
+      }
     });
     item.append(remove);
     elements.attachmentList.append(item);
   }
 }
 
+function renderWebSearchResults(results = []) {
+  elements.webSearchResults.replaceChildren();
+  for (const source of results) {
+    const item = createElement('label', { className: 'web-search-result' });
+    const select = document.createElement('input');
+    select.type = 'checkbox';
+    select.checked = pendingWebSources.some((selected) => selected.url === source.url);
+    select.addEventListener('change', () => {
+      pendingWebSources = select.checked
+        ? [...pendingWebSources, source]
+        : pendingWebSources.filter((selected) => selected.url !== source.url);
+    });
+    const text = createElement('span');
+    const link = createElement('a', {
+      text: source.title,
+      attributes: { href: source.url, target: '_blank', rel: 'noopener' }
+    });
+    const snippet = createElement('small', { text: source.snippet || source.engine || source.url });
+    text.append(link, snippet);
+    item.append(select, text);
+    elements.webSearchResults.append(item);
+  }
+}
+
+function renderCollections() {
+  const collection = activeCollection();
+  elements.collectionSelect.replaceChildren(
+    ...collections.map((item) => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.name;
+      return option;
+    })
+  );
+  elements.collectionSelect.value = collection?.id || '';
+  elements.deleteCollectionButton.disabled = !collection || collection.id === DEFAULT_COLLECTION_ID;
+  elements.collectionDocumentList.replaceChildren();
+
+  for (const document of collection?.documents || []) {
+    const item = createElement('div', { className: 'collection-document' });
+    const name = createElement('span', { text: document.name });
+    const remove = createButton({
+      className: 'attachment-remove',
+      label: 'x',
+      ariaLabel: t('removeDocument', { name: document.name }),
+      onClick: () => {
+        if (!confirm(t('removeDocumentConfirm', { name: document.name }))) return;
+        removeDocument(collection, document.id);
+        persist();
+        renderCollections();
+      }
+    });
+    item.append(name, remove);
+    elements.collectionDocumentList.append(item);
+  }
+}
+
 function actionButton(label, action) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'message-action';
-  button.textContent = label;
-  button.disabled = Boolean(currentController);
-  button.addEventListener('click', action);
-  return button;
+  return createButton({
+    className: 'message-action',
+    label,
+    disabled: Boolean(currentController),
+    onClick: action
+  });
 }
 
 function download(filename, content, type) {
@@ -287,6 +371,19 @@ function messageElement(message, conversation, index) {
     content.prepend(attachments);
   }
 
+  if (message.webSources?.length) {
+    const sources = createElement('div', { className: 'message-attachments web-sources' });
+    for (const source of message.webSources) {
+      const link = createElement('a', {
+        className: 'attachment-item',
+        text: source.title,
+        attributes: { href: source.url, target: '_blank', rel: 'noopener' }
+      });
+      sources.append(link);
+    }
+    content.prepend(sources);
+  }
+
   const isLatest = index === conversation.messages.length - 1;
   const recoverable =
     message.role === 'assistant' &&
@@ -294,30 +391,18 @@ function messageElement(message, conversation, index) {
     (message.status === 'failed' || message.status === 'stopped');
 
   if (recoverable) {
-    const recovery = document.createElement('div');
-    recovery.className = `message-recovery ${message.status}`;
-
-    const errorText = document.createElement('div');
-    errorText.className = 'message-error';
-
-    const errorTitle = document.createElement('strong');
-    errorTitle.textContent = t(
-      message.status === 'stopped' ? 'generationStopped' : 'responseInterrupted'
-    );
-
-    const errorDetail = document.createElement('span');
-    errorDetail.textContent = message.error?.message || t('responseIncomplete');
-    errorText.append(errorTitle, errorDetail);
-
-    const actions = document.createElement('div');
-    actions.className = 'message-actions';
-    actions.append(actionButton(t('retry'), () => retryMessage(conversation.id, index)));
+    const actions = [actionButton(t('retry'), () => retryMessage(conversation.id, index))];
     if (message.content.trim()) {
-      actions.append(actionButton(t('continue'), () => continueMessage(conversation.id, index)));
+      actions.push(actionButton(t('continue'), () => continueMessage(conversation.id, index)));
     }
-
-    recovery.append(errorText, actions);
-    content.append(recovery);
+    content.append(
+      createRecoveryNotice({
+        state: message.status,
+        title: t(message.status === 'stopped' ? 'generationStopped' : 'responseInterrupted'),
+        detail: message.error?.message || t('responseIncomplete'),
+        actions
+      })
+    );
   }
 
   const actions = document.createElement('div');
@@ -384,6 +469,7 @@ function renderMessages() {
 function render() {
   renderConversationList();
   renderMessages();
+  renderCollections();
 
   const conversation = activeConversation();
   const options = [...elements.modelSelect.options].map((o) => o.value);
@@ -477,9 +563,15 @@ async function generateResponse(conversation, assistantMessage, requestMessages)
   try {
     await streamChat({
       model: conversation.model,
-      messages: requestMessages.map((message) => ({
+      messages: requestMessages.map((message, index) => ({
         role: message.role,
-        content: messagePromptContent(message)
+        content:
+          index === requestMessages.length - 1 && message.role === 'user'
+            ? retrievalPromptContent(message, [
+                ...requestMessages,
+                { role: 'user', content: '', attachments: activeCollection()?.documents || [] }
+              ])
+            : messagePromptContent({ ...message, attachments: [] })
       })),
       settings: generationSettings(conversation),
       signal: currentController.signal,
@@ -523,7 +615,7 @@ async function generateResponse(conversation, assistantMessage, requestMessages)
   }
 }
 
-async function sendMessage(text, attachments = pendingAttachments) {
+async function sendMessage(text, attachments = pendingAttachments, webSources = pendingWebSources) {
   const clean = text.trim();
   if ((!clean && attachments.length === 0) || currentController) return;
 
@@ -531,8 +623,11 @@ async function sendMessage(text, attachments = pendingAttachments) {
   if (!conversation) conversation = createConversation();
 
   conversation.model = elements.modelSelect.value || appConfig.defaultModel;
-  conversation.messages.push({ role: 'user', content: clean, attachments });
+  conversation.messages.push({ role: 'user', content: clean, attachments, webSources });
   pendingAttachments = [];
+  pendingWebSources = [];
+  elements.webSearchQuery.value = '';
+  renderWebSearchResults();
   elements.attachmentError.textContent = '';
   renderAttachments();
 
@@ -615,11 +710,14 @@ async function initialize() {
     const stored = await conversationStorage.load();
     conversations = stored.conversations;
     activeId = stored.activeId;
+    collections = ensureCollections(stored.collections);
     theme = stored.preferences?.theme || 'system';
     expandReasoning = stored.preferences?.expandReasoning === true;
     locale = stored.preferences?.locale || navigator.language.slice(0, 2);
     preferredModel = stored.preferences?.preferredModel || '';
+    selectedCollectionId = stored.preferences?.selectedCollectionId || DEFAULT_COLLECTION_ID;
   } catch {
+    collections = ensureCollections();
     setStatus('bad', t('serverUnavailable'));
   }
   applyTheme();
@@ -629,6 +727,7 @@ async function initialize() {
     appConfig = await getConfig();
     document.title = appConfig.name;
     elements.appVersion.textContent = appConfig.version ? `Version ${appConfig.version}` : '';
+    elements.webSearch.classList.toggle('hidden', !appConfig.webSearchEnabled);
   } catch {
     // Keep the built-in application name when configuration is unavailable.
   }
@@ -694,6 +793,7 @@ async function initialize() {
     activeId = conversations[0].id;
     persist();
   }
+  if (!activeCollection()) selectedCollectionId = collections[0].id;
 
   render();
   setGenerating(false);
@@ -739,11 +839,12 @@ elements.attachmentInput.addEventListener('change', async () => {
     }
 
     try {
+      const parsed = parseDocument(file.name, await file.text());
       pendingAttachments.push({
         name: file.name,
         size: file.size,
         type: file.type || 'text/plain',
-        content: await file.text()
+        ...parsed
       });
       elements.attachmentError.textContent = '';
     } catch {
@@ -753,6 +854,79 @@ elements.attachmentInput.addEventListener('change', async () => {
   elements.attachmentInput.value = '';
   renderAttachments();
   renderContextUsage();
+});
+
+elements.webSearchButton.addEventListener('click', async () => {
+  const query = elements.webSearchQuery.value.trim();
+  if (!query) return;
+  elements.webSearchButton.disabled = true;
+  try {
+    renderWebSearchResults(await searchWeb(query, locale));
+  } catch (error) {
+    elements.attachmentError.textContent = error.message;
+  } finally {
+    elements.webSearchButton.disabled = false;
+  }
+});
+
+elements.collectionSelect.addEventListener('change', () => {
+  selectedCollectionId = elements.collectionSelect.value;
+  persist();
+  renderCollections();
+});
+
+elements.newCollectionButton.addEventListener('click', () => {
+  const name = prompt(t('collectionName'));
+  if (name === null) return;
+  const collection = createCollection(collections, name);
+  if (!collection) {
+    elements.attachmentError.textContent = t('collectionNameInvalid');
+    return;
+  }
+  collections.push(collection);
+  selectedCollectionId = collection.id;
+  persist();
+  renderCollections();
+});
+
+elements.deleteCollectionButton.addEventListener('click', () => {
+  const collection = activeCollection();
+  if (!collection || !confirm(t('deleteCollectionConfirm', { name: collection.name }))) return;
+  if (!removeCollection(collections, collection.id)) return;
+  selectedCollectionId = DEFAULT_COLLECTION_ID;
+  persist();
+  renderCollections();
+});
+
+elements.collectionDocumentInput.addEventListener('change', async () => {
+  const collection = activeCollection();
+  if (!collection) return;
+  const documents = [];
+  for (const file of elements.collectionDocumentInput.files) {
+    const error = attachmentError(file, []);
+    if (error) {
+      elements.attachmentError.textContent = error;
+      continue;
+    }
+    try {
+      documents.push({
+        id: crypto.randomUUID(),
+        name: file.name,
+        size: file.size,
+        type: file.type || 'text/plain',
+        ...parseDocument(file.name, await file.text())
+      });
+    } catch {
+      elements.attachmentError.textContent = t('fileReadFailed', { name: file.name });
+    }
+  }
+  if (documents.length > 0) {
+    addDocuments(collection, documents);
+    elements.attachmentError.textContent = '';
+    persist();
+    renderCollections();
+  }
+  elements.collectionDocumentInput.value = '';
 });
 
 elements.prompt.addEventListener('keydown', (event) => {

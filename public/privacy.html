@@ -18,9 +18,9 @@
       <section>
         <h2>Where data lives</h2>
         <p>
-          Conversation history, display preferences, and supported text attachments are stored in
-          this browser's IndexedDB. Maia Chat does not persist conversations or uploaded files on
-          its server.
+          Conversation history, display preferences, supported text attachments, and saved document
+          collections are stored in this browser's IndexedDB. Maia Chat does not persist
+          conversations or uploaded files on its server.
         </p>
       </section>
 
@@ -35,13 +35,24 @@
       </section>
 
       <section>
+        <h2>Web search</h2>
+        <p>
+          When an operator enables private SearXNG search and you run a search, Maia Chat sends the
+          query to that configured search service. Maia Chat does not retain search queries or
+          results on its server. Sources you select are stored in your browser conversation and are
+          sent to the configured inference service with the message so Maia can cite them.
+        </p>
+      </section>
+
+      <section>
         <h2>Logs and retention</h2>
         <p>
           Application logs record operational metadata such as request IDs, paths, status codes,
           durations, model IDs, token counts, and stable error codes. They do not log prompts,
           completions, attachment contents, authorization headers, or API tokens. Browser data is
-          retained until you delete a conversation or clear the browser's site data. Export your
-          history before clearing browser data if you want to keep it.
+          retained until you delete a conversation, remove the document or its collection, or clear
+          the browser's site data. Export your history before clearing browser data if you want to
+          keep it.
         </p>
       </section>
 

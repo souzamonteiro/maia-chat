@@ -27,6 +27,15 @@ test('validateConfiguration rejects invalid network and capacity settings', () =
   const invalidLimit = validConfig();
   invalidLimit.maxConcurrentGenerations = 0;
   assert.throws(() => validateConfiguration(invalidLimit), /maxConcurrentGenerations/);
+
+  const invalidSearchProvider = validConfig();
+  invalidSearchProvider.searchProvider = 'public-search';
+  assert.throws(() => validateConfiguration(invalidSearchProvider), /MAIA_SEARCH_PROVIDER/);
+
+  const invalidSearchUrl = validConfig();
+  invalidSearchUrl.searchProvider = 'searxng';
+  invalidSearchUrl.searxngUrl = '';
+  assert.throws(() => validateConfiguration(invalidSearchUrl), /MAIA_SEARXNG_URL/);
 });
 
 test('validateConfiguration rejects duplicate IDs and unsafe API key records', () => {
@@ -40,6 +49,10 @@ test('validateConfiguration rejects duplicate IDs and unsafe API key records', (
   const scope = validConfig();
   scope.apiKeys = [{ id: 'cli', hash: 'a'.repeat(64), scopes: ['admin'] }];
   assert.throws(() => validateConfiguration(scope), /invalid scopes/);
+
+  const embeddings = validConfig();
+  embeddings.apiKeys = [{ id: 'embedder', hash: 'a'.repeat(64), scopes: ['embeddings'] }];
+  assert.doesNotThrow(() => validateConfiguration(embeddings));
 });
 
 test('validateConfiguration rejects invalid model-specific generation defaults', () => {

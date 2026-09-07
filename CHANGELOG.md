@@ -8,6 +8,14 @@ All notable changes to Maia Chat are documented in this file.
 
 - Release policy and deployment checklist.
 - Server-side model blacklist for hiding and rejecting selected canonical IDs.
+- Separate token protection for detailed operational readiness.
+- Local document parsing and semantic chunking for text attachments.
+- Local attachment retrieval with source chunk citations in chat prompts.
+- Browser-local document collections with explicit document and collection removal.
+- OpenAI-compatible embeddings endpoint backed by Ollama with an explicit API scope.
+- Operator allowlist for OpenAI-style tool calls forwarded to Ollama without server execution.
+- Configurable OpenAI-compatible inference adapter for llama.cpp and vLLM.
+- Optional private SearXNG web search with selected source attribution in chat history.
 
 ## [0.1.0] - 2026-09-07
 

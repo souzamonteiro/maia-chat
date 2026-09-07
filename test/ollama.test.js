@@ -12,6 +12,7 @@ import {
 } from '../server/errors.js';
 import {
   chatCompletion,
+  createEmbeddings,
   listModels,
   listRunningModelIds,
   warmModel
@@ -21,12 +22,14 @@ const originalFetch = globalThis.fetch;
 const originalTimeout = config.ollamaTimeoutMs;
 const originalModelSettings = config.modelSettings;
 const originalModelBlacklist = config.modelBlacklist;
+const originalToolAllowlist = config.toolAllowlist;
 
 test.afterEach(() => {
   globalThis.fetch = originalFetch;
   config.ollamaTimeoutMs = originalTimeout;
   config.modelSettings = originalModelSettings;
   config.modelBlacklist = originalModelBlacklist;
+  config.toolAllowlist = originalToolAllowlist;
 });
 
 function jsonResponse(value, init) {
@@ -138,6 +141,56 @@ test('warmModel loads the selected model without requesting generated tokens', a
     keep_alive: '10m',
     options: { num_predict: 0 }
   });
+});
+
+test('createEmbeddings resolves the model and maps Ollama embeddings', async () => {
+  let upstreamBody;
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith('/api/tags')) return installedModels();
+    upstreamBody = JSON.parse(options.body);
+    return jsonResponse({
+      model: 'qwen2.5:3b',
+      embeddings: [
+        [0.1, 0.2],
+        [0.3, 0.4]
+      ]
+    });
+  };
+
+  const result = await createEmbeddings({ model: 'qwen2.5:3b', input: ['first', 'second'] });
+
+  assert.deepEqual(upstreamBody, { model: 'qwen2.5:3b', input: ['first', 'second'] });
+  assert.deepEqual(result, {
+    model: 'qwen2.5:3b',
+    embeddings: [
+      [0.1, 0.2],
+      [0.3, 0.4]
+    ]
+  });
+});
+
+test('chatCompletion forwards operator-approved tools and returns tool calls', async () => {
+  config.toolAllowlist = ['calculator'];
+  let upstreamBody;
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith('/api/tags')) return installedModels();
+    upstreamBody = JSON.parse(options.body);
+    return jsonResponse({
+      model: 'qwen2.5:3b',
+      message: { content: '', tool_calls: [{ function: { name: 'calculator', arguments: {} } }] }
+    });
+  };
+  const tools = [{ type: 'function', function: { name: 'calculator', parameters: {} } }];
+
+  const result = await chatCompletion({
+    model: 'qwen2.5:3b',
+    messages: [{ role: 'user', content: 'What is 2 + 2?' }],
+    stream: false,
+    tools
+  });
+
+  assert.deepEqual(upstreamBody.tools, tools);
+  assert.deepEqual(result.toolCalls, [{ function: { name: 'calculator', arguments: {} } }]);
 });
 
 test('chatCompletion rejects an empty Ollama installation', async () => {

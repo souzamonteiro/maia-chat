@@ -2,7 +2,9 @@
 
 Maia Chat is the public web interface and OpenAI-compatible gateway for Maia language models.
 
-The first version uses **Ollama** as its inference provider. The web application does not talk directly to Ollama; it talks to Maia Chat, which keeps the inference backend replaceable.
+The default provider is **Ollama**. The web application does not talk directly
+to an inference provider; it talks to Maia Chat, which supports Ollama and
+OpenAI-compatible servers such as `llama.cpp` and vLLM.
 
 ## Architecture
 
@@ -55,12 +57,72 @@ Ollama
 - At least one model installed in Ollama
 - Nginx on the public ingress if using Maia Edge
 
+## Inference providers
+
+Ollama is the default:
+
+```env
+MAIA_INFERENCE_PROVIDER=ollama
+OLLAMA_URL=http://127.0.0.1:11434
+```
+
+For `llama.cpp` or vLLM in OpenAI-compatible mode, configure its base URL and
+optional bearer token. The server must expose `/v1/models`,
+`/v1/chat/completions`, and `/v1/embeddings`.
+
+```env
+MAIA_INFERENCE_PROVIDER=openai-compatible
+MAIA_OPENAI_COMPATIBLE_URL=http://127.0.0.1:8000
+MAIA_OPENAI_COMPATIBLE_TOKEN=
+```
+
+Web search is designed for a private SearXNG deployment. See
+[docs/SEARXNG.md](docs/SEARXNG.md) for installation, network restrictions, and
+Maia Chat configuration.
+
+## Web search
+
+After SearXNG is installed, enable the private search bridge:
+
+```env
+MAIA_SEARCH_PROVIDER=searxng
+MAIA_SEARXNG_URL=http://127.0.0.1:8080
+MAIA_SEARCH_TIMEOUT_MS=10000
+MAIA_SEARCH_MAX_RESULTS=5
+```
+
+The composer shows web search only when the server enables it. Search results
+are fetched by Maia Chat, not the browser; select sources before sending a
+message to include their title, URL, and summary as local, citable context.
+Results are not retained by the server. Selected sources are stored with the
+browser-local conversation so their links remain available in its history.
+
 ## Development
 
 ```bash
 cp .env.example .env
 npm install
 npm run dev
+```
+
+## Native installation
+
+On Ubuntu/Debian, install Maia Chat without Docker from a complete repository
+checkout. The installer creates the unprivileged `maia` system user, installs
+Node.js 22 and required system packages, copies the application to
+`/srv/maia/maia-chat`, installs production dependencies, creates a private
+`.env` if needed, and enables `maia-chat.service`.
+
+```bash
+sudo ./scripts/install.sh
+```
+
+Existing `/srv/maia/maia-chat/.env` files are preserved. Review it after the
+first install, then apply configuration changes with:
+
+```bash
+sudo systemctl restart maia-chat
+sudo systemctl status maia-chat --no-pager
 ```
 
 For supported runtime and release procedures, see
@@ -254,10 +316,22 @@ test guards these headers against accidental weakening.
 The composer can attach up to three local text files (`.txt`, `.text`, `.md`,
 `.markdown`, `.csv`, `.json`, and `.log`). Each file is limited to 512 KiB and
 the combined limit is 1 MiB. Maia Chat reads supported files in the browser,
-stores them only with the local conversation, and sends their text as clearly
-delimited reference material with the next chat request. Binary files, images,
-and PDFs are rejected; server-side retention, document parsing, and semantic
-search are not part of this feature.
+stores them only with the local conversation, normalizes valid JSON, and splits
+text at Markdown headings and paragraph boundaries into local chunks of up to
+4,000 characters. Chunks are sent as clearly delimited reference material with
+the next chat request. Binary files, images, and PDFs are rejected; server-side
+retention is not part of this feature.
+
+For a question sent after documents are attached, Maia Chat ranks local chunks
+by shared terms with the question and sends up to four relevant sources to the
+model. The model is instructed to cite factual claims as `[file name, chunk
+n/total]`. Retrieval stays within the browser conversation: it does not create
+a server-side document collection, use embeddings, or make external requests.
+
+The sidebar also provides browser-local document collections. A saved document
+is retained in IndexedDB until it is removed explicitly or its collection is
+deleted; removing a collection removes all documents in it. The default Library
+collection is retained so a collection is always available for local retrieval.
 
 ## Conversation data
 
@@ -297,9 +371,12 @@ Readiness verifies that Ollama is reachable and models can be listed:
 
 ```http
 GET /api/health/ready
+Authorization: Bearer <MAIA_OPERATIONS_TOKEN>
 ```
 
-Readiness also requires `MAIA_DEFAULT_MODEL` to be installed. Set
+`/api/health` is public and returns only the summary used by the browser. Detailed
+readiness requires `MAIA_OPERATIONS_TOKEN` and returns `404` when it is disabled
+or the token is invalid. Readiness also requires `MAIA_DEFAULT_MODEL` to be installed. Set
 `MAIA_WARMUP_MODEL=true` to issue an empty, zero-token request at startup and
 keep that model warm for ten minutes. Warm-up is opt-in so idle deployments do
 not retain model memory unnecessarily.
@@ -309,6 +386,28 @@ not retain model memory unnecessarily.
 ```http
 GET /v1/models
 ```
+
+### Embeddings
+
+```http
+POST /v1/embeddings
+Content-Type: application/json
+Authorization: Bearer <API key with embeddings scope>
+```
+
+The endpoint accepts `input` as a string or array of strings and forwards it to
+Ollama's local embedding API. Responses use OpenAI-compatible indexed vectors.
+Requesting a blocked or unavailable model returns the same stable model errors
+as chat completions.
+
+### Tool calling
+
+Chat completions accept OpenAI-style `tools` function definitions only when the
+function name is listed in `MAIA_TOOL_ALLOWLIST`, a JSON array of permitted
+names. The default empty allowlist rejects all tools with `tool_not_allowed`.
+Maia forwards approved definitions and returns Ollama `tool_calls`, but never
+executes a tool: the authenticated API client must enforce its own permissions
+and execute any requested function outside Maia Chat.
 
 ### Chat completion
 

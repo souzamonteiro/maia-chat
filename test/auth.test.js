@@ -78,4 +78,10 @@ test('apiAuth rejects expired keys and requireScope limits authorized keys', () 
   const denied = response();
   requireScope('chat')(req, denied, () => assert.fail('chat scope should be denied'));
   assert.equal(denied.statusCode, 403);
+
+  const embeddingsDenied = response();
+  requireScope('embeddings')(req, embeddingsDenied, () =>
+    assert.fail('embeddings scope should be denied')
+  );
+  assert.equal(embeddingsDenied.statusCode, 403);
 });

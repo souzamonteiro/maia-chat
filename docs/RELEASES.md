@@ -27,8 +27,9 @@ Releases use semantic versioning:
    and `npm test` with Node 20 and Node 22. Run `npm run test:browser` with
    Playwright Chromium.
 3. Deploy to staging with the intended Ollama version and configuration.
-4. Verify `/api/health/live`, `/api/health/ready`, a streamed chat, API-key
-   scope enforcement, and `/api/metrics` when enabled.
+4. Verify `/api/health/live`, `/api/health/ready` with
+   `MAIA_OPERATIONS_TOKEN`, a streamed chat, API-key scope enforcement, and
+   `/api/metrics` with `MAIA_METRICS_TOKEN` when enabled.
 5. Verify Nginx has TLS enabled, buffering disabled for streams, matching idle
    timeouts, `TimeoutStopSec` greater than `MAIA_SHUTDOWN_TIMEOUT_MS`, and
    `MAIA_TRUSTED_PROXY` restricted to the ingress address.

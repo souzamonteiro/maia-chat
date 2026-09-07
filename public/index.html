@@ -48,6 +48,50 @@
         </label>
         <div class="conversation-list" id="conversationList"></div>
 
+        <section class="document-library" aria-labelledby="collectionHeading">
+          <div class="document-library-heading">
+            <span id="collectionHeading" data-i18n="documentCollections">Documents</span>
+            <button
+              id="newCollectionButton"
+              type="button"
+              data-i18n-aria-label="newCollection"
+              aria-label="New collection"
+            >
+              +
+            </button>
+          </div>
+          <div class="collection-controls">
+            <select
+              id="collectionSelect"
+              data-i18n-aria-label="documentCollections"
+              aria-label="Documents"
+            ></select>
+            <button
+              id="deleteCollectionButton"
+              class="attachment-remove"
+              type="button"
+              data-i18n-aria-label="deleteCollection"
+              aria-label="Delete collection"
+            >
+              x
+            </button>
+          </div>
+          <div
+            class="collection-document-list"
+            id="collectionDocumentList"
+            aria-live="polite"
+          ></div>
+          <label class="collection-add" for="collectionDocumentInput"
+            ><span data-i18n="addDocuments">Add documents</span>
+            <input
+              id="collectionDocumentInput"
+              type="file"
+              accept=".txt,.text,.md,.markdown,.csv,.json,.log"
+              multiple
+            />
+          </label>
+        </section>
+
         <div class="sidebar-footer">
           <label for="modelSelect" data-i18n="model">Model</label>
           <select id="modelSelect"></select>
@@ -184,6 +228,21 @@
             ></textarea>
             <div class="attachment-list" id="attachmentList" aria-live="polite"></div>
             <p class="attachment-error" id="attachmentError" aria-live="polite"></p>
+            <section class="web-search hidden" id="webSearch" aria-labelledby="webSearchLabel">
+              <div class="web-search-controls">
+                <label id="webSearchLabel" for="webSearchQuery" data-i18n="webSearch"
+                  >Web search</label
+                >
+                <input
+                  id="webSearchQuery"
+                  type="search"
+                  data-i18n-placeholder="webSearchPlaceholder"
+                  placeholder="Search the web"
+                />
+                <button id="webSearchButton" type="button" data-i18n="search">Search</button>
+              </div>
+              <div class="web-search-results" id="webSearchResults" aria-live="polite"></div>
+            </section>
             <details class="generation-controls">
               <summary data-i18n="generation">Generation</summary>
               <label

@@ -1,4 +1,6 @@
 import { config } from '../config.js';
+import * as openaiCompatible from './openai-compatible.js';
+import { validateTools } from '../tools.js';
 import {
   AppError,
   ModelDisabledError,
@@ -48,6 +50,7 @@ function parameterSize(model) {
 }
 
 export async function listModels() {
+  if (config.inferenceProvider === 'openai-compatible') return openaiCompatible.listModels();
   const timed = withTimeout();
 
   try {
@@ -82,6 +85,8 @@ export async function listModels() {
 }
 
 export async function listRunningModelIds() {
+  if (config.inferenceProvider === 'openai-compatible')
+    return openaiCompatible.listRunningModelIds();
   const timed = withTimeout();
   try {
     const response = await fetch(`${config.ollamaUrl}/api/ps`, { signal: timed.signal });
@@ -96,6 +101,7 @@ export async function listRunningModelIds() {
 }
 
 export async function warmModel(model = config.defaultModel) {
+  if (config.inferenceProvider === 'openai-compatible') return openaiCompatible.warmModel(model);
   const timed = withTimeout();
   try {
     const response = await fetch(`${config.ollamaUrl}/api/generate`, {
@@ -119,23 +125,56 @@ export async function warmModel(model = config.defaultModel) {
   }
 }
 
-export async function chatCompletion(body, { signal, onChunk } = {}) {
-  let targetModel = body.model || config.defaultModel;
+async function resolveModel(model) {
+  let targetModel = model || config.defaultModel;
   if (config.modelBlacklist.includes(targetModel)) {
     throw new ModelDisabledError(targetModel);
   }
   const models = await listModels();
 
-  if (models.length === 0) {
-    throw new NoModelsInstalledError();
-  }
-
-  if (!models.some((model) => model.id === targetModel)) {
-    if (body.model) {
-      throw new ModelNotInstalledError(targetModel);
-    }
+  if (models.length === 0) throw new NoModelsInstalledError();
+  if (!models.some((item) => item.id === targetModel)) {
+    if (model) throw new ModelNotInstalledError(targetModel);
     targetModel = models[0].id;
   }
+  return targetModel;
+}
+
+export async function createEmbeddings({ model, input }) {
+  if (config.inferenceProvider === 'openai-compatible') {
+    return openaiCompatible.createEmbeddings({ model, input });
+  }
+  const targetModel = await resolveModel(model);
+  const timed = withTimeout();
+
+  try {
+    const response = await fetch(`${config.ollamaUrl}/api/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: targetModel, input }),
+      signal: timed.signal
+    });
+    if (!response.ok) throw new UpstreamResponseError(response.status, await response.text());
+
+    const data = await response.json();
+    if (!Array.isArray(data.embeddings)) {
+      throw new UpstreamResponseError(response.status, 'Ollama returned no embeddings.');
+    }
+    return { model: data.model || targetModel, embeddings: data.embeddings };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new OllamaUnavailableError('Could not connect to Ollama.', { cause: error });
+  } finally {
+    timed.clear();
+  }
+}
+
+export async function chatCompletion(body, { signal, onChunk } = {}) {
+  if (config.inferenceProvider === 'openai-compatible') {
+    return openaiCompatible.chatCompletion(body, { signal, onChunk });
+  }
+  const targetModel = await resolveModel(body.model);
+  const tools = validateTools(body.tools);
 
   const timed = withTimeout(signal);
   const messages = body.messages || [];
@@ -148,6 +187,7 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
     messages: [...systemMessages, ...messages],
     stream: body.stream !== false
   };
+  if (tools.length > 0) ollamaBody.tools = tools;
 
   const generation = { ...settings.generation };
   if (body.temperature !== undefined) generation.temperature = body.temperature;
@@ -183,6 +223,7 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
       return {
         model: data.model || ollamaBody.model,
         content,
+        ...(data.message?.tool_calls ? { toolCalls: data.message.tool_calls } : {}),
         promptEvalCount: data.prompt_eval_count || 0,
         evalCount: data.eval_count || 0,
         doneReason: data.done_reason || 'stop'
@@ -299,6 +340,7 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
     return {
       model: finalData?.model || ollamaBody.model,
       content: '',
+      ...(finalData?.message?.tool_calls ? { toolCalls: finalData.message.tool_calls } : {}),
       promptEvalCount: finalData?.prompt_eval_count || 0,
       evalCount: finalData?.eval_count || 0,
       doneReason: finalData?.done_reason || 'stop'
@@ -309,6 +351,14 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
 }
 
 export async function health() {
+  if (config.inferenceProvider === 'openai-compatible') {
+    try {
+      await openaiCompatible.listModels();
+      return true;
+    } catch {
+      return false;
+    }
+  }
   const timed = withTimeout();
 
   try {

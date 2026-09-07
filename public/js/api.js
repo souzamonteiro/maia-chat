@@ -46,6 +46,16 @@ export async function getModels() {
   return data.data || [];
 }
 
+export async function searchWeb(query, language) {
+  const params = new URLSearchParams({ q: query });
+  if (language) params.set('language', language);
+  const response = await fetch(`/api/search?${params}`);
+  if (!response.ok)
+    throw await responseError(response, `Search request failed (${response.status}).`);
+  const data = await response.json();
+  return data.data || [];
+}
+
 export async function streamChat({ model, messages, settings, signal, onToken, onComplete }) {
   const response = await fetch('/api/chat/completions', {
     method: 'POST',

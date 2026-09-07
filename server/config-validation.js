@@ -10,6 +10,8 @@ const positiveIntegers = [
   'generationQueueTimeoutMs',
   'rateLimitWindowMs',
   'rateLimitMaxRequests',
+  'searchTimeoutMs',
+  'searchMaxResults',
   'shutdownTimeoutMs',
   'ollamaTimeoutMs'
 ];
@@ -19,6 +21,12 @@ export function validateConfiguration(config) {
     throw new Error('PORT must be an integer between 1 and 65535.');
   }
   if (!config.host.trim()) throw new Error('HOST must not be empty.');
+  if (!['ollama', 'openai-compatible'].includes(config.inferenceProvider)) {
+    throw new Error('MAIA_INFERENCE_PROVIDER must be ollama or openai-compatible.');
+  }
+  if (!['disabled', 'searxng'].includes(config.searchProvider)) {
+    throw new Error('MAIA_SEARCH_PROVIDER must be disabled or searxng.');
+  }
 
   for (const field of positiveIntegers.filter((field) => field !== 'port')) {
     if (!Number.isInteger(config[field]) || config[field] < 1) {
@@ -31,6 +39,22 @@ export function validateConfiguration(config) {
     if (!['http:', 'https:'].includes(url.protocol)) throw new Error('unsupported protocol');
   } catch {
     throw new Error('OLLAMA_URL must be a valid http:// or https:// URL.');
+  }
+  if (config.inferenceProvider === 'openai-compatible') {
+    try {
+      const url = new URL(config.openaiCompatibleUrl);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('unsupported protocol');
+    } catch {
+      throw new Error('MAIA_OPENAI_COMPATIBLE_URL must be a valid http:// or https:// URL.');
+    }
+  }
+  if (config.searchProvider === 'searxng') {
+    try {
+      const url = new URL(config.searxngUrl);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('unsupported protocol');
+    } catch {
+      throw new Error('MAIA_SEARXNG_URL must be a valid http:// or https:// URL.');
+    }
   }
 
   const namedProxies = new Set(['loopback', 'linklocal', 'uniquelocal']);
@@ -50,7 +74,7 @@ export function validateConfiguration(config) {
     if (
       key.scopes &&
       (!Array.isArray(key.scopes) ||
-        key.scopes.some((scope) => !['models', 'chat'].includes(scope)))
+        key.scopes.some((scope) => !['models', 'chat', 'embeddings'].includes(scope)))
     ) {
       throw new Error(`API key ${key.id} has invalid scopes.`);
     }

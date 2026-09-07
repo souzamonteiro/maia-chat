@@ -52,6 +52,19 @@ function modelBlacklist(value = '') {
   }
 }
 
+function toolAllowlist(value = '') {
+  if (!value) return [];
+  try {
+    const names = JSON.parse(value);
+    if (!Array.isArray(names) || names.some((name) => typeof name !== 'string' || !name.trim())) {
+      throw new Error('must be an array of tool names');
+    }
+    return [...new Set(names.map((name) => name.trim()))];
+  } catch {
+    throw new Error('MAIA_TOOL_ALLOWLIST must be a JSON array of non-empty tool names.');
+  }
+}
+
 const defaultSystemPrompt = [
   'You are Maia, a helpful local AI assistant.',
   'Support Portuguese, English, and Spanish.',
@@ -65,8 +78,10 @@ export const config = {
   port: Number(process.env.PORT || 3080),
   maiaName: process.env.MAIA_NAME || 'Maia',
   version: process.env.MAIA_VERSION || '0.1.0',
+  inferenceProvider: process.env.MAIA_INFERENCE_PROVIDER || 'ollama',
   defaultModel: process.env.MAIA_DEFAULT_MODEL || 'qwen2.5:3b',
   modelBlacklist: modelBlacklist(process.env.MAIA_MODEL_BLACKLIST),
+  toolAllowlist: toolAllowlist(process.env.MAIA_TOOL_ALLOWLIST),
   modelSettings: modelSettings(process.env.MAIA_MODEL_SETTINGS),
   warmupModel: boolean(process.env.MAIA_WARMUP_MODEL),
   systemPrompt: process.env.MAIA_SYSTEM_PROMPT || defaultSystemPrompt,
@@ -83,8 +98,15 @@ export const config = {
   rateLimitWindowMs: Number(process.env.MAIA_RATE_LIMIT_WINDOW_MS || 60000),
   rateLimitMaxRequests: Number(process.env.MAIA_RATE_LIMIT_MAX_REQUESTS || 20),
   metricsToken: process.env.MAIA_METRICS_TOKEN || '',
+  operationsToken: process.env.MAIA_OPERATIONS_TOKEN || '',
+  searchProvider: process.env.MAIA_SEARCH_PROVIDER || 'disabled',
+  searxngUrl: (process.env.MAIA_SEARXNG_URL || '').replace(/\/$/, ''),
+  searchTimeoutMs: Number(process.env.MAIA_SEARCH_TIMEOUT_MS || 10000),
+  searchMaxResults: Number(process.env.MAIA_SEARCH_MAX_RESULTS || 5),
   shutdownTimeoutMs: Number(process.env.MAIA_SHUTDOWN_TIMEOUT_MS || 30000),
   ollamaUrl: (process.env.OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, ''),
+  openaiCompatibleUrl: (process.env.MAIA_OPENAI_COMPATIBLE_URL || '').replace(/\/$/, ''),
+  openaiCompatibleToken: process.env.MAIA_OPENAI_COMPATIBLE_TOKEN || '',
   ollamaTimeoutMs: Number(process.env.OLLAMA_TIMEOUT_MS || 120000),
   apiKeys: apiKeys(process.env.MAIA_API_KEYS),
   trustedProxy: csv(process.env.MAIA_TRUSTED_PROXY),

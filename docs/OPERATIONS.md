@@ -4,8 +4,9 @@
 
 Set `MAIA_METRICS_TOKEN` and scrape `GET /api/metrics` with a Bearer
 authorization header. Scrape readiness separately through Prometheus HTTP SD or
-Blackbox Exporter at `GET /api/health/ready`; its `probe_success` series is used
-by the readiness alert.
+Blackbox Exporter at `GET /api/health/ready` with a Bearer
+`MAIA_OPERATIONS_TOKEN` header; its `probe_success` series is used by the
+readiness alert.
 
 Load `deploy/prometheus/maia-alerts.yml` through the Prometheus `rule_files`
 configuration. Adjust thresholds to observed hardware capacity and expected
