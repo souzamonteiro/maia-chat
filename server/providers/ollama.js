@@ -1,8 +1,27 @@
 import { config } from '../config.js';
+import {
+  AppError,
+  ModelDisabledError,
+  ModelNotInstalledError,
+  NoModelsInstalledError,
+  OllamaUnavailableError,
+  UpstreamResponseError,
+  UpstreamTimeoutError
+} from '../errors.js';
 
 function withTimeout(signal) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.ollamaTimeoutMs);
+  let timeout;
+
+  const reset = () => {
+    clearTimeout(timeout);
+    timeout = setTimeout(
+      () => controller.abort(new UpstreamTimeoutError()),
+      config.ollamaTimeoutMs
+    );
+  };
+
+  reset();
 
   if (signal) {
     if (signal.aborted) controller.abort();
@@ -11,8 +30,21 @@ function withTimeout(signal) {
 
   return {
     signal: controller.signal,
+    reset,
     clear: () => clearTimeout(timeout)
   };
+}
+
+function displayName(id) {
+  return id.replace(/[:_-]/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function parameterSize(model) {
+  return (
+    model.details?.parameter_size ||
+    model.name.match(/:(\d+(?:\.\d+)?b)/i)?.[1]?.toUpperCase() ||
+    null
+  );
 }
 
 export async function listModels() {
@@ -23,40 +55,110 @@ export async function listModels() {
       signal: timed.signal
     });
 
-    if (!response.ok) {
-      throw new Error(`Ollama returned HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new UpstreamResponseError(response.status);
 
     const data = await response.json();
-    return (data.models || []).map(model => ({
-      id: model.name,
-      object: 'model',
-      created: model.modified_at
-        ? Math.floor(new Date(model.modified_at).getTime() / 1000)
-        : 0,
-      owned_by: 'ollama'
-    }));
+    return (data.models || [])
+      .filter((model) => !config.modelBlacklist.includes(model.name))
+      .map((model) => ({
+        id: model.name,
+        object: 'model',
+        created: model.modified_at ? Math.floor(new Date(model.modified_at).getTime() / 1000) : 0,
+        owned_by: 'ollama',
+        provider: 'Ollama',
+        display_name: displayName(model.name),
+        parameter_size: parameterSize(model),
+        context_window: config.defaultContextWindow,
+        capabilities: ['chat', 'streaming'],
+        generation_defaults: config.modelSettings[model.name]?.generation || null,
+        status: model.name === config.defaultModel ? 'default' : 'installed'
+      }));
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new OllamaUnavailableError('Could not connect to Ollama.', { cause: error });
+  } finally {
+    timed.clear();
+  }
+}
+
+export async function listRunningModelIds() {
+  const timed = withTimeout();
+  try {
+    const response = await fetch(`${config.ollamaUrl}/api/ps`, { signal: timed.signal });
+    if (!response.ok) return new Set();
+    const data = await response.json();
+    return new Set((data.models || []).map((model) => model.name).filter(Boolean));
+  } catch {
+    return new Set();
+  } finally {
+    timed.clear();
+  }
+}
+
+export async function warmModel(model = config.defaultModel) {
+  const timed = withTimeout();
+  try {
+    const response = await fetch(`${config.ollamaUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt: '',
+        stream: false,
+        keep_alive: '10m',
+        options: { num_predict: 0 }
+      }),
+      signal: timed.signal
+    });
+    if (!response.ok) throw new UpstreamResponseError(response.status);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new OllamaUnavailableError('Could not warm up the default model.', { cause: error });
   } finally {
     timed.clear();
   }
 }
 
 export async function chatCompletion(body, { signal, onChunk } = {}) {
+  let targetModel = body.model || config.defaultModel;
+  if (config.modelBlacklist.includes(targetModel)) {
+    throw new ModelDisabledError(targetModel);
+  }
+  const models = await listModels();
+
+  if (models.length === 0) {
+    throw new NoModelsInstalledError();
+  }
+
+  if (!models.some((model) => model.id === targetModel)) {
+    if (body.model) {
+      throw new ModelNotInstalledError(targetModel);
+    }
+    targetModel = models[0].id;
+  }
+
   const timed = withTimeout(signal);
+  const messages = body.messages || [];
+  const settings = config.modelSettings[targetModel] || {};
+  const systemPrompt = settings.systemPrompt ?? config.systemPrompt;
+  const systemMessages = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
 
   const ollamaBody = {
-    model: body.model || config.defaultModel,
-    messages: body.messages || [],
+    model: targetModel,
+    messages: [...systemMessages, ...messages],
     stream: body.stream !== false
   };
 
-  if (body.temperature !== undefined ||
-      body.top_p !== undefined ||
-      body.max_tokens !== undefined) {
+  const generation = { ...settings.generation };
+  if (body.temperature !== undefined) generation.temperature = body.temperature;
+  if (body.top_p !== undefined) generation.top_p = body.top_p;
+  if (body.max_tokens !== undefined) generation.max_tokens = body.max_tokens;
+  if (Object.keys(generation).length > 0) {
     ollamaBody.options = {};
-    if (body.temperature !== undefined) ollamaBody.options.temperature = body.temperature;
-    if (body.top_p !== undefined) ollamaBody.options.top_p = body.top_p;
-    if (body.max_tokens !== undefined) ollamaBody.options.num_predict = body.max_tokens;
+    if (generation.temperature !== undefined)
+      ollamaBody.options.temperature = generation.temperature;
+    if (generation.top_p !== undefined) ollamaBody.options.top_p = generation.top_p;
+    if (generation.max_tokens !== undefined) ollamaBody.options.num_predict = generation.max_tokens;
   }
 
   try {
@@ -69,14 +171,18 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
 
     if (!response.ok) {
       const detail = await response.text();
-      throw new Error(`Ollama returned HTTP ${response.status}: ${detail}`);
+      throw new UpstreamResponseError(response.status, detail);
     }
 
     if (!ollamaBody.stream) {
       const data = await response.json();
+      let content = data.message?.content || '';
+      if (data.message?.thinking) {
+        content = `<think>\n${data.message.thinking}\n</think>\n\n${content}`;
+      }
       return {
         model: data.model || ollamaBody.model,
-        content: data.message?.content || '',
+        content,
         promptEvalCount: data.prompt_eval_count || 0,
         evalCount: data.eval_count || 0,
         doneReason: data.done_reason || 'stop'
@@ -91,11 +197,15 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
     const decoder = new TextDecoder();
     let buffer = '';
     let finalData = null;
+    let inThinking = false;
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
+      // The timeout protects against a stalled Ollama connection. A model that
+      // is actively streaming may legitimately take longer than the timeout.
+      timed.reset();
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
@@ -104,18 +214,86 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
         if (!line.trim()) continue;
         const data = JSON.parse(line);
 
-        if (data.message?.content) {
-          onChunk?.({
-            model: data.model || ollamaBody.model,
-            content: data.message.content,
-            done: false
-          });
+        const content = data.message?.content || '';
+        const thinking = data.message?.thinking || '';
+
+        if (thinking) {
+          if (!inThinking) {
+            inThinking = true;
+            onChunk?.({
+              model: data.model || ollamaBody.model,
+              content: '<think>\n' + thinking,
+              done: false
+            });
+          } else {
+            onChunk?.({
+              model: data.model || ollamaBody.model,
+              content: thinking,
+              done: false
+            });
+          }
+        } else if (content) {
+          if (inThinking) {
+            inThinking = false;
+            onChunk?.({
+              model: data.model || ollamaBody.model,
+              content: '\n</think>\n\n' + content,
+              done: false
+            });
+          } else {
+            onChunk?.({
+              model: data.model || ollamaBody.model,
+              content,
+              done: false
+            });
+          }
         }
 
         if (data.done) {
+          if (inThinking) {
+            inThinking = false;
+            onChunk?.({
+              model: data.model || ollamaBody.model,
+              content: '\n</think>\n\n',
+              done: false
+            });
+          }
           finalData = data;
         }
       }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      const data = JSON.parse(buffer);
+      const content = data.message?.content || '';
+      const thinking = data.message?.thinking || '';
+
+      if (thinking) {
+        onChunk?.({
+          model: data.model || ollamaBody.model,
+          content: `${inThinking ? '' : '<think>\n'}${thinking}`,
+          done: false
+        });
+        inThinking = true;
+      } else if (content) {
+        onChunk?.({
+          model: data.model || ollamaBody.model,
+          content: `${inThinking ? '\n</think>\n\n' : ''}${content}`,
+          done: false
+        });
+        inThinking = false;
+      }
+
+      if (data.done) finalData = data;
+    }
+
+    if (inThinking) {
+      onChunk?.({
+        model: finalData?.model || ollamaBody.model,
+        content: '\n</think>\n\n',
+        done: false
+      });
     }
 
     return {

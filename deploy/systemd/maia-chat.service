@@ -12,6 +12,7 @@ EnvironmentFile=/srv/maia/maia-chat/.env
 ExecStart=/usr/bin/node server/server.js
 Restart=on-failure
 RestartSec=3
+TimeoutStopSec=45
 
 NoNewPrivileges=true
 PrivateTmp=true

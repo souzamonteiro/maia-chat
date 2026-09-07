@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#123f2b" />
+    <meta name="description" content="Available local language models in Maia Chat." />
+    <title>Models | Maia</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/maia.css" />
+  </head>
+  <body>
+    <main class="policy-page">
+      <a class="policy-back" href="/">Back to Maia</a>
+      <h1>Available Models</h1>
+      <p class="policy-updated">Model information is refreshed from the local Ollama service.</p>
+      <p id="modelPageStatus" role="status">Loading models...</p>
+      <div class="model-info-list" id="modelInfoList"></div>
+      <section>
+        <h2>Provenance</h2>
+        <p>
+          Maia Chat discovers models installed in the Ollama service configured by the operator.
+          Provider, parameter size, context window, and runtime status are reported by Maia Chat and
+          Ollama. Verify model licenses, training data claims, and intended use with the upstream
+          model card or the operator before relying on a model for a sensitive use case.
+        </p>
+      </section>
+    </main>
+    <script type="module" src="/js/models-page.js"></script>
+  </body>
+</html>

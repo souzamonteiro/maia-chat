@@ -42,7 +42,7 @@
 - [ ] vLLM provider
 - [ ] Authentication/accounts
 - [ ] RAG integration
-- [ ] File upload
+- [x] Text-file attachments with explicit size and type limits
 - [ ] Tools/function calling
 - [ ] Embeddings endpoint
 - [ ] Admin/metrics dashboard

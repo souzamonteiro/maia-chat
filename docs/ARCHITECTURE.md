@@ -140,13 +140,14 @@ API authentication is intentionally implemented at the Maia Chat layer rather th
 
 ## Storage
 
-Version 0.1 keeps conversation data in the browser.
-
-This avoids collecting user conversations centrally while the project is experimental.
+Conversation data is kept in browser-local IndexedDB, avoiding central prompt
+collection while supporting larger local histories and text attachments. The
+storage schema uses database versioning. On first use, the application migrates
+the legacy v1 `localStorage` keys and deletes them only after IndexedDB accepts
+the complete state.
 
 A later release may add:
 
-- IndexedDB for larger browser-side history.
 - Optional server-side persistence.
 - User accounts.
 - Explicit retention policies.

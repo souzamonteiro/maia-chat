@@ -1,0 +1,38 @@
+groups:
+  - name: maia-chat
+    rules:
+      - alert: MaiaReadinessUnavailable
+        expr: probe_success{job="maia-readiness"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Maia Chat readiness probe is failing
+          description: The /api/health/ready probe has failed for at least two minutes.
+
+      - alert: MaiaGenerationFailuresHigh
+        expr: sum(rate(maia_generations_total{outcome="failed"}[5m])) / clamp_min(sum(rate(maia_generations_total[5m])), 0.01) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Maia Chat generation failure rate is high
+          description: More than 10% of generations have failed for ten minutes.
+
+      - alert: MaiaGenerationQueueBackedUp
+        expr: maia_queued_generations > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Maia Chat generation queue is backed up
+          description: Requests have been waiting for a generation slot for at least five minutes.
+
+      - alert: MaiaGenerationLatencyHigh
+        expr: rate(maia_generation_duration_seconds_sum[10m]) / clamp_min(rate(maia_generation_duration_seconds_count[10m]), 0.01) > 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Maia Chat generation latency is high
+          description: Average generation duration has exceeded 60 seconds for ten minutes.

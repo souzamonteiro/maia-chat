@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:3080}"
-MODEL="${MODEL:-qwen2.5:14b}"
+MODEL="${MODEL:-qwen2.5:3b}"
 
 echo "== Health =="
 curl -fsS "$BASE_URL/api/health"

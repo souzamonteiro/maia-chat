@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#123f2b" />
+    <meta name="description" content="Privacy, retention, and acceptable use for Maia Chat." />
+    <title>Privacy & Use | Maia</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/maia.css" />
+  </head>
+  <body>
+    <main class="policy-page">
+      <a class="policy-back" href="/">Back to Maia</a>
+      <h1>Privacy & Use</h1>
+      <p class="policy-updated">Last updated: 2026-09-07</p>
+
+      <section>
+        <h2>Where data lives</h2>
+        <p>
+          Conversation history, display preferences, and supported text attachments are stored in
+          this browser's IndexedDB. Maia Chat does not persist conversations or uploaded files on
+          its server.
+        </p>
+      </section>
+
+      <section>
+        <h2>Inference and attachments</h2>
+        <p>
+          When you send a message, its text and any attached text-file content are sent to the
+          configured Ollama inference service so it can generate a response. Do not submit secrets,
+          passwords, financial information, or sensitive personal data unless you control and trust
+          the whole deployment.
+        </p>
+      </section>
+
+      <section>
+        <h2>Logs and retention</h2>
+        <p>
+          Application logs record operational metadata such as request IDs, paths, status codes,
+          durations, model IDs, token counts, and stable error codes. They do not log prompts,
+          completions, attachment contents, authorization headers, or API tokens. Browser data is
+          retained until you delete a conversation or clear the browser's site data. Export your
+          history before clearing browser data if you want to keep it.
+        </p>
+      </section>
+
+      <section>
+        <h2>Model limitations</h2>
+        <p>
+          Language-model output can be incomplete, inaccurate, biased, or unsafe for a particular
+          context. Review important facts and code independently. Maia is not a substitute for
+          professional medical, legal, financial, or safety advice.
+        </p>
+      </section>
+
+      <section>
+        <h2>Acceptable use</h2>
+        <p>
+          Use Maia lawfully and responsibly. Do not use it to harm others, bypass security controls,
+          distribute malware, violate privacy, or create deceptive content. Operators may apply
+          capacity limits to protect the service for all users.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

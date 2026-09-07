@@ -34,6 +34,8 @@ If Node listens directly on the WireGuard address:
 ```env
 HOST=<CLIENT_WIREGUARD_IP>
 PORT=3080
+# Trust only the WireGuard IP of the Nginx VPS to forward client IPs.
+MAIA_TRUSTED_PROXY=<VPS_WIREGUARD_IP>
 ```
 
 Confirm:
@@ -112,6 +114,17 @@ proxy_cache off;
 proxy_read_timeout 300s;
 ```
 
+For IP-based rate limits to identify the browser rather than Nginx, retain the
+standard forwarded header in the Nginx site configuration:
+
+```nginx
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+Set `MAIA_TRUSTED_PROXY` only to the Nginx VPS WireGuard IP or an explicitly
+trusted CIDR. Do not configure a trust-all proxy value, because it lets clients
+spoof their IP address through `X-Forwarded-For`.
+
 The application also emits:
 
 ```http
@@ -119,3 +132,20 @@ X-Accel-Buffering: no
 ```
 
 for chat streams.
+
+## 8. Timeout alignment
+
+The defaults intentionally protect against stalled connections without imposing
+a total limit on an active model response:
+
+| Layer               | Setting                                       | Default              |
+| ------------------- | --------------------------------------------- | -------------------- |
+| Maia Chat to Ollama | `OLLAMA_TIMEOUT_MS` inactivity timeout        | 120 seconds          |
+| Nginx upstream      | `proxy_read_timeout` and `proxy_send_timeout` | 300 seconds          |
+| Node.js HTTP server | request timeout                               | disabled for streams |
+| systemd             | `TimeoutStopSec` graceful shutdown allowance  | 45 seconds           |
+
+Keep Nginx idle timeouts greater than `OLLAMA_TIMEOUT_MS`; `300s` leaves room
+for a controlled upstream error to reach the browser. Node does not end an
+active stream on a fixed duration. WireGuard peers should use `PersistentKeepalive
+= 25` when NAT could otherwise expire an idle tunnel between requests.

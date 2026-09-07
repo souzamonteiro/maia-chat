@@ -1,0 +1,17 @@
+{
+  "name": "Maia Chat",
+  "short_name": "Maia",
+  "description": "A local and independent interface for language models.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0f10",
+  "theme_color": "#123f2b",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

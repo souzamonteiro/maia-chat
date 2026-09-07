@@ -1,3 +1,30 @@
+export class ApiError extends Error {
+  constructor(message, { status = 0, type = 'request_error', code = 'request_error' } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.type = type;
+    this.code = code;
+  }
+}
+
+async function responseError(response, fallback) {
+  try {
+    const data = await response.json();
+    if (data.error?.message) {
+      return new ApiError(data.error.message, {
+        status: response.status,
+        type: data.error.type,
+        code: data.error.code
+      });
+    }
+  } catch {
+    // Use the generic error when an upstream response is not JSON.
+  }
+
+  return new ApiError(fallback, { status: response.status });
+}
+
 export async function getConfig() {
   const response = await fetch('/api/config');
   if (!response.ok) throw new Error('Could not load configuration.');
@@ -13,27 +40,27 @@ export async function getHealth() {
 }
 
 export async function getModels() {
-  const response = await fetch('/v1/models');
+  const response = await fetch('/api/models');
   if (!response.ok) throw new Error('Could not load models.');
   const data = await response.json();
   return data.data || [];
 }
 
-export async function streamChat({ model, messages, signal, onToken }) {
-  const response = await fetch('/v1/chat/completions', {
+export async function streamChat({ model, messages, settings, signal, onToken, onComplete }) {
+  const response = await fetch('/api/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
       messages,
+      ...settings,
       stream: true
     }),
     signal
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Chat request failed (${response.status}): ${detail}`);
+    throw await responseError(response, `Chat request failed (${response.status}).`);
   }
 
   if (!response.body) throw new Error('Streaming is not supported by this browser.');
@@ -51,9 +78,7 @@ export async function streamChat({ model, messages, signal, onToken }) {
     buffer = events.pop() || '';
 
     for (const event of events) {
-      const line = event
-        .split('\n')
-        .find(item => item.startsWith('data: '));
+      const line = event.split('\n').find((item) => item.startsWith('data: '));
 
       if (!line) continue;
       const payload = line.slice(6).trim();
@@ -61,10 +86,19 @@ export async function streamChat({ model, messages, signal, onToken }) {
       if (payload === '[DONE]') return;
 
       const data = JSON.parse(payload);
-      if (data.error) throw new Error(data.error.message);
+      if (data.error) {
+        throw new ApiError(data.error.message, {
+          type: data.error.type,
+          code: data.error.code
+        });
+      }
 
       const token = data.choices?.[0]?.delta?.content;
       if (token) onToken(token);
+
+      if (data.choices?.[0]?.finish_reason) {
+        onComplete?.({ usage: data.usage, elapsedMs: data.elapsed_ms });
+      }
     }
   }
 }
