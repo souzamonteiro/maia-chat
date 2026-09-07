@@ -38,6 +38,14 @@ PORT=3080
 MAIA_TRUSTED_PROXY=<VPS_WIREGUARD_IP>
 ```
 
+The bundled `maia-chat.service` requires `wg-quick@wg0.service` and starts only
+after `wg0` is available. Enable the tunnel before enabling Maia Chat:
+
+```bash
+sudo systemctl enable --now wg-quick@wg0
+sudo systemctl enable --now maia-chat
+```
+
 Confirm:
 
 ```bash
