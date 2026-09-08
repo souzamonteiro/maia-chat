@@ -46,6 +46,26 @@ export async function getModels() {
   return data.data || [];
 }
 
+function base64(buffer) {
+  let binary = '';
+  for (const byte of new Uint8Array(buffer)) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+export async function extractDocument(file) {
+  const response = await fetch('/api/documents/extract', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: file.name,
+      contentBase64: base64(await file.arrayBuffer())
+    })
+  });
+  if (!response.ok)
+    throw await responseError(response, `Document extraction failed (${response.status}).`);
+  return response.json();
+}
+
 export async function searchWeb(query, language) {
   const params = new URLSearchParams({ q: query });
   if (language) params.set('language', language);

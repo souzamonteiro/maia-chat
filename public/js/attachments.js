@@ -1,13 +1,77 @@
 export const MAX_ATTACHMENT_FILES = 3;
 export const MAX_ATTACHMENT_BYTES = 512 * 1024;
-export const MAX_TOTAL_ATTACHMENT_BYTES = 1024 * 1024;
+export const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 export const MAX_DOCUMENT_CHUNK_CHARS = 4000;
 export const MAX_RETRIEVED_CHUNKS = 4;
 
-const acceptedExtensions = new Set(['csv', 'json', 'log', 'md', 'markdown', 'text', 'txt']);
+const textExtensions = new Set([
+  'c',
+  'cc',
+  'cfg',
+  'conf',
+  'cpp',
+  'cs',
+  'css',
+  'csv',
+  'cxx',
+  'ebnf',
+  'go',
+  'bash',
+  'h',
+  'hpp',
+  'htm',
+  'html',
+  'ini',
+  'java',
+  'js',
+  'json',
+  'jsx',
+  'kotlin',
+  'kt',
+  'lua',
+  'log',
+  'm',
+  'maia',
+  'maiascript',
+  'markdown',
+  'md',
+  'mjs',
+  'php',
+  'pl',
+  'py',
+  'r',
+  'rb',
+  'rs',
+  'scss',
+  'sh',
+  'sql',
+  'swift',
+  'text',
+  'toml',
+  'ts',
+  'tsx',
+  'txt',
+  'xml',
+  'yaml',
+  'yml'
+]);
+const textFileNames = new Set([
+  '.env',
+  '.env.example',
+  '.gitignore',
+  'CMakeLists.txt',
+  'Dockerfile',
+  'Makefile'
+]);
+const documentExtensions = new Set(['docx', 'pdf', 'pptx', 'xlsx']);
 
 function extension(name) {
   return name.toLowerCase().split('.').pop();
+}
+
+function isTextFile(name) {
+  return textExtensions.has(extension(name)) || textFileNames.has(name);
 }
 
 function normalizeText(content) {
@@ -62,6 +126,10 @@ export function parseDocument(name, content) {
   if (current) chunks.push(current);
 
   return { content: text, chunks };
+}
+
+export function requiresServerExtraction(name) {
+  return documentExtensions.has(extension(name));
 }
 
 function terms(content = '') {
@@ -148,10 +216,14 @@ export function retrievalPromptContent(message, messages) {
 }
 
 export function attachmentError(file, attachments) {
-  if (!acceptedExtensions.has(extension(file.name))) {
-    return 'Only TXT, Markdown, CSV, JSON, and log files are supported.';
+  const type = extension(file.name);
+  if (!isTextFile(file.name) && !documentExtensions.has(type)) {
+    return 'Only text, PDF, DOCX, XLSX, and PPTX files are supported.';
   }
-  if (file.size > MAX_ATTACHMENT_BYTES) {
+  const maxBytes = requiresServerExtraction(file.name) ? MAX_DOCUMENT_BYTES : MAX_ATTACHMENT_BYTES;
+  if (file.size > maxBytes) {
+    if (requiresServerExtraction(file.name))
+      return 'Each PDF or Office file must be 10 MiB or smaller.';
     return 'Each attachment must be 512 KiB or smaller.';
   }
   if (attachments.length >= MAX_ATTACHMENT_FILES) {

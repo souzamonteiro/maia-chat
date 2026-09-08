@@ -1,12 +1,20 @@
-import { getConfig, getHealth, getModels, searchWeb, streamChat } from './api.js';
+import {
+  extractDocument,
+  getConfig,
+  getHealth,
+  getModels,
+  searchWeb,
+  streamChat
+} from './api.js?v=2';
 import { conversationStorage } from './storage.js';
 import { contextUsage } from './context.js';
 import {
   attachmentError,
   messagePromptContent,
   parseDocument,
+  requiresServerExtraction,
   retrievalPromptContent
-} from './attachments.js';
+} from './attachments.js?v=2';
 import {
   addDocuments,
   createCollection,
@@ -27,7 +35,7 @@ import {
   searchConversations
 } from './conversations.js';
 import { renderMarkdown } from './markdown.js?v=2';
-import { applyTranslations, translate } from './i18n.js?v=2';
+import { applyTranslations, translate } from './i18n.js?v=3';
 import { createButton, createElement, createRecoveryNotice } from './ui.js?v=1';
 
 const elements = {
@@ -839,7 +847,9 @@ elements.attachmentInput.addEventListener('change', async () => {
     }
 
     try {
-      const parsed = parseDocument(file.name, await file.text());
+      const parsed = requiresServerExtraction(file.name)
+        ? await extractDocument(file)
+        : parseDocument(file.name, await file.text());
       pendingAttachments.push({
         name: file.name,
         size: file.size,
@@ -909,12 +919,15 @@ elements.collectionDocumentInput.addEventListener('change', async () => {
       continue;
     }
     try {
+      const parsed = requiresServerExtraction(file.name)
+        ? await extractDocument(file)
+        : parseDocument(file.name, await file.text());
       documents.push({
         id: crypto.randomUUID(),
         name: file.name,
         size: file.size,
         type: file.type || 'text/plain',
-        ...parseDocument(file.name, await file.text())
+        ...parsed
       });
     } catch {
       elements.attachmentError.textContent = t('fileReadFailed', { name: file.name });

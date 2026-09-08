@@ -8,16 +8,22 @@ import {
   retrievalPromptContent,
   retrieveDocumentChunks,
   MAX_DOCUMENT_CHUNK_CHARS,
-  MAX_ATTACHMENT_BYTES
+  MAX_ATTACHMENT_BYTES,
+  MAX_DOCUMENT_BYTES
 } from '../public/js/attachments.js';
 
 test('attachmentError enforces supported formats and explicit size limits', () => {
   assert.equal(attachmentError({ name: 'notes.txt', size: 12 }, []), '');
-  assert.match(attachmentError({ name: 'report.pdf', size: 12 }, []), /Only TXT/);
+  assert.equal(attachmentError({ name: 'program.cpp', size: 12 }, []), '');
+  assert.equal(attachmentError({ name: 'assistant.maiascript', size: 12 }, []), '');
+  assert.equal(attachmentError({ name: 'Dockerfile', size: 12 }, []), '');
+  assert.equal(attachmentError({ name: 'report.pdf', size: 12 }, []), '');
+  assert.match(attachmentError({ name: 'report.exe', size: 12 }, []), /Only text/);
   assert.match(
     attachmentError({ name: 'large.txt', size: MAX_ATTACHMENT_BYTES + 1 }, []),
     /512 KiB/
   );
+  assert.match(attachmentError({ name: 'large.pdf', size: MAX_DOCUMENT_BYTES + 1 }, []), /10 MiB/);
 });
 
 test('messagePromptContent clearly delimits attachment reference material', () => {

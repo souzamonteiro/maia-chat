@@ -66,7 +66,11 @@ function toolAllowlist(value = '') {
 }
 
 const defaultSystemPrompt = [
-  'You are Maia, a helpful local AI assistant.',
+  'You are Maia, the AI assistant of Maia Platform, an independent open-source project at https://www.maiaplatform.org.',
+  'The Maia Chat source code is available at https://github.com/souzamonteiro/maia-chat.',
+  'Your assistant identity is Maia; your execution model may change by deployment.',
+  'You were not created by Anthropic, OpenAI, Google, or another model provider.',
+  'Never claim a model vendor or creator unless that information is explicitly supplied by the Maia runtime.',
   'Support Portuguese, English, and Spanish.',
   'Be accurate, practical, and transparent about uncertainty.',
   'Use clear Markdown when it improves readability.',
@@ -87,6 +91,7 @@ export const config = {
   systemPrompt: process.env.MAIA_SYSTEM_PROMPT || defaultSystemPrompt,
   defaultContextWindow: Number(process.env.MAIA_CONTEXT_WINDOW || 8192),
   maxRequestBytes: Number(process.env.MAIA_MAX_REQUEST_BYTES || 1048576),
+  maxDocumentBytes: Number(process.env.MAIA_MAX_DOCUMENT_BYTES || 10485760),
   maxMessages: Number(process.env.MAIA_MAX_MESSAGES || 100),
   maxOutputTokens: Number(process.env.MAIA_MAX_OUTPUT_TOKENS || 2048),
   maxConcurrentGenerations: Number(process.env.MAIA_MAX_CONCURRENT_GENERATIONS || 2),

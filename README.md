@@ -314,13 +314,12 @@ test guards these headers against accidental weakening.
 ## Attachments
 
 The composer can attach up to three local text files (`.txt`, `.text`, `.md`,
-`.markdown`, `.csv`, `.json`, and `.log`). Each file is limited to 512 KiB and
-the combined limit is 1 MiB. Maia Chat reads supported files in the browser,
-stores them only with the local conversation, normalizes valid JSON, and splits
-text at Markdown headings and paragraph boundaries into local chunks of up to
-4,000 characters. Chunks are sent as clearly delimited reference material with
-the next chat request. Binary files, images, and PDFs are rejected; server-side
-retention is not part of this feature.
+`.markdown`, `.csv`, `.json`, and `.log`) or documents in PDF, DOCX, XLSX, and
+PPTX format. Text files are limited to 512 KiB; PDF and Office files are
+limited to `MAIA_MAX_DOCUMENT_BYTES` (10 MiB by default). The combined browser
+limit is 20 MiB. Office and PDF files are sent to a temporary extraction
+endpoint and only extracted text/chunks are stored in the local conversation;
+the original files are not retained by Maia Chat.
 
 For a question sent after documents are attached, Maia Chat ranks local chunks
 by shared terms with the question and sends up to four relevant sources to the

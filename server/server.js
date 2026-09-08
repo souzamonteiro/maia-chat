@@ -12,6 +12,7 @@ import { modelsRouter } from './routes/models.js';
 import { embeddingsRouter } from './routes/embeddings.js';
 import { searchRouter } from './routes/search.js';
 import { metricsRouter } from './routes/metrics.js';
+import { documentsRouter } from './routes/documents.js';
 import { warmModel } from './providers/ollama.js';
 import { errorPayload } from './errors.js';
 import { drainStreams } from './lifecycle.js';
@@ -49,6 +50,11 @@ app.use(
 
 app.use(requestId);
 app.use(requestLogger);
+app.use(
+  '/api/documents',
+  express.json({ limit: Math.ceil(config.maxDocumentBytes * 1.4) + 4096 }),
+  documentsRouter
+);
 app.use(express.json({ limit: config.maxRequestBytes }));
 
 app.use((req, res, next) => {

@@ -2,6 +2,7 @@ const positiveIntegers = [
   'port',
   'defaultContextWindow',
   'maxRequestBytes',
+  'maxDocumentBytes',
   'maxMessages',
   'maxOutputTokens',
   'maxConcurrentGenerations',

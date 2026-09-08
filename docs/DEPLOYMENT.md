@@ -103,6 +103,10 @@ Reload:
 sudo systemctl reload nginx
 ```
 
+The Nginx site must allow the document extraction request body. Maia Chat
+accepts documents up to 10 MiB before browser base64 encoding, so keep
+`client_max_body_size 15m` on `/api/documents/`.
+
 ## 6. Verification
 
 ```bash
