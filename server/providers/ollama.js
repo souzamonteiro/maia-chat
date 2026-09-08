@@ -201,6 +201,8 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
     if (generation.max_tokens !== undefined) ollamaBody.options.num_predict = generation.max_tokens;
   }
 
+  ollamaBody.options = { num_ctx: config.defaultContextWindow, ...ollamaBody.options };
+
   try {
     const response = await fetch(`${config.ollamaUrl}/api/chat`, {
       method: 'POST',
@@ -254,6 +256,7 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
       for (const line of lines) {
         if (!line.trim()) continue;
         const data = JSON.parse(line);
+        if (data.error) throw new UpstreamResponseError(502, data.error);
 
         const content = data.message?.content || '';
         const thinking = data.message?.thinking || '';
@@ -273,7 +276,8 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
               done: false
             });
           }
-        } else if (content) {
+        }
+        if (content) {
           if (inThinking) {
             inThinking = false;
             onChunk?.({
@@ -307,6 +311,7 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
     buffer += decoder.decode();
     if (buffer.trim()) {
       const data = JSON.parse(buffer);
+      if (data.error) throw new UpstreamResponseError(502, data.error);
       const content = data.message?.content || '';
       const thinking = data.message?.thinking || '';
 
@@ -317,7 +322,8 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
           done: false
         });
         inThinking = true;
-      } else if (content) {
+      }
+      if (content) {
         onChunk?.({
           model: data.model || ollamaBody.model,
           content: `${inThinking ? '\n</think>\n\n' : ''}${content}`,
@@ -327,6 +333,10 @@ export async function chatCompletion(body, { signal, onChunk } = {}) {
       }
 
       if (data.done) finalData = data;
+    }
+
+    if (!finalData) {
+      throw new UpstreamResponseError(502, 'Ollama stream ended before completion.');
     }
 
     if (inThinking) {

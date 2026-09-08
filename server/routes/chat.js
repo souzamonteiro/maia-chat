@@ -54,9 +54,16 @@ chatRouter.post('/', async (req, res, next) => {
     return next(error);
   }
 
-  const inputTokens = estimateInputTokens(body.messages);
-  if (inputTokens >= config.defaultContextWindow) {
-    return next(new ContextOverflowError(inputTokens, config.defaultContextWindow));
+  const settings = config.modelSettings[body.model || config.defaultModel] || {};
+  const systemPrompt = settings.systemPrompt ?? config.systemPrompt;
+  const inputTokens = estimateInputTokens([
+    { content: systemPrompt || '' },
+    ...body.messages,
+    ...(body.tools?.length ? [{ content: JSON.stringify(body.tools) }] : [])
+  ]);
+  const outputTokens = body.max_tokens ?? settings.generation?.max_tokens ?? config.maxOutputTokens;
+  if (inputTokens + outputTokens >= config.defaultContextWindow) {
+    return next(new ContextOverflowError(inputTokens + outputTokens, config.defaultContextWindow));
   }
 
   const model = body.model || config.defaultModel;

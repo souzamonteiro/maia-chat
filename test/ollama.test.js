@@ -252,7 +252,12 @@ test('chatCompletion applies model-specific prompts and generation defaults', as
   await chatCompletion({ model: 'qwen2.5:3b', messages: [{ role: 'user', content: 'Hello' }] });
 
   assert.equal(upstreamBody.messages[0].content, 'You are Maia Code.');
-  assert.deepEqual(upstreamBody.options, { temperature: 0.2, top_p: 0.8, num_predict: 256 });
+  assert.deepEqual(upstreamBody.options, {
+    num_ctx: config.defaultContextWindow,
+    temperature: 0.2,
+    top_p: 0.8,
+    num_predict: 256
+  });
 });
 
 test('chatCompletion parses fragmented streaming output and reasoning', async () => {
@@ -332,4 +337,33 @@ test('caller cancellation aborts the Ollama request', async () => {
     ),
     (error) => error?.name === 'AbortError'
   );
+});
+
+test('chatCompletion rejects premature EOF and streamed errors', async () => {
+  for (const text of ['{"message":{"content":"partial"}}\n', '{"error":"generation failed"}\n']) {
+    globalThis.fetch = async (url) =>
+      url.endsWith('/api/tags') ? installedModels() : streamingResponse([{ text }]);
+    await assert.rejects(
+      chatCompletion({ messages: [{ role: 'user', content: 'Hello' }] }),
+      UpstreamResponseError
+    );
+  }
+});
+
+test('chatCompletion preserves thinking and content in the same final chunk', async () => {
+  globalThis.fetch = async (url) =>
+    url.endsWith('/api/tags')
+      ? installedModels()
+      : streamingResponse([
+          {
+            text: '{"message":{"thinking":"reason","content":"answer"},"done":true,"done_reason":"length"}'
+          }
+        ]);
+  const output = [];
+  const result = await chatCompletion(
+    { messages: [{ role: 'user', content: 'Hello' }] },
+    { onChunk: (chunk) => output.push(chunk.content) }
+  );
+  assert.equal(output.join(''), '<think>\nreason\n</think>\n\nanswer');
+  assert.equal(result.doneReason, 'length');
 });

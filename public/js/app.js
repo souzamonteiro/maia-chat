@@ -4,6 +4,7 @@ import {
   getHealth,
   getModels,
   searchWeb,
+  ApiError,
   streamChat
 } from './api.js?v=2';
 import { conversationStorage } from './storage.js';
@@ -109,7 +110,7 @@ let serviceAvailable = false;
 const defaultGenerationSettings = {
   temperature: 0.7,
   top_p: 0.9,
-  max_tokens: 512
+  max_tokens: 2048
 };
 let appConfig = {
   name: 'Maia',
@@ -554,6 +555,7 @@ async function generateResponse(conversation, assistantMessage, requestMessages)
 
   assistantMessage.status = 'generating';
   delete assistantMessage.error;
+  delete assistantMessage.finishReason;
   conversation.updatedAt = Date.now();
   persist();
   render();
@@ -588,7 +590,8 @@ async function generateResponse(conversation, assistantMessage, requestMessages)
         if (rendered) renderMessageContent(rendered, assistantMessage.content);
         elements.chat.scrollTop = elements.chat.scrollHeight;
       },
-      onComplete({ usage, elapsedMs }) {
+      onComplete({ usage, elapsedMs, finishReason }) {
+        assistantMessage.finishReason = finishReason;
         const duration = elapsedMs ?? Math.round(performance.now() - startedAt);
         const completionTokens = usage?.completion_tokens ?? 0;
         assistantMessage.metrics = {
@@ -599,6 +602,9 @@ async function generateResponse(conversation, assistantMessage, requestMessages)
         };
       }
     });
+    if (assistantMessage.finishReason === 'length') {
+      throw new ApiError(t('responseTokenLimit'), { code: 'output_token_limit' });
+    }
     assistantMessage.status = 'completed';
   } catch (error) {
     const stopped = error.name === 'AbortError';

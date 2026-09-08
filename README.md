@@ -563,3 +563,19 @@ For the prioritized implementation checklist and acceptance criteria, see [TODO.
 ## License
 
 MIT
+
+### Incomplete responses and context limits
+
+New conversations default to 2048 output tokens. Existing conversations retain their
+saved settings: increase **Max tokens** if they still use 512. The server output
+ceiling is `MAIA_MAX_OUTPUT_TOKENS` (2048 by default). A `length` finish reason is
+shown as an incomplete response, with the partial text preserved. A stream that
+closes without its completion marker is reported as an error.
+
+For Ollama, `MAIA_CONTEXT_WINDOW` (8192 by default) is sent as `options.num_ctx`.
+Choose a value supported by your model and available memory. The gateway sends
+message text without slicing it and checks an estimated budget including the
+system prompt, tool definitions, and reserved output. This character-based estimate
+is not an exact tokenizer and cannot guarantee that Ollama retains every input
+token. Attached documents use retrieval: selected chunks, rather than every page,
+are included in the prompt.

@@ -55,6 +55,8 @@ const translations = {
     responseIncomplete: 'The response did not complete.',
     stoppedByUser: 'You stopped this response.',
     generatingResponse: 'Generating response',
+    responseTokenLimit:
+      'Response reached the token limit. Increase Max tokens in settings and retry.',
     generationFailed: 'Generation failed',
     connecting: 'Connecting to Maia',
     loadingModels: 'Loading models',
@@ -133,6 +135,8 @@ const translations = {
     responseIncomplete: 'A resposta não foi concluída.',
     stoppedByUser: 'Você interrompeu esta resposta.',
     generatingResponse: 'Gerando resposta',
+    responseTokenLimit:
+      'A resposta atingiu o limite de tokens. Aumente Máx. tokens nas configurações e tente novamente.',
     generationFailed: 'Falha na geração',
     connecting: 'Conectando a Maia',
     loadingModels: 'Carregando modelos',
@@ -211,6 +215,8 @@ const translations = {
     responseIncomplete: 'La respuesta no se completó.',
     stoppedByUser: 'Detuviste esta respuesta.',
     generatingResponse: 'Generando respuesta',
+    responseTokenLimit:
+      'La respuesta alcanzó el límite de tokens. Aumenta Máx. tokens en la configuración y vuelve a intentarlo.',
     generationFailed: 'La generación falló',
     connecting: 'Conectando con Maia',
     loadingModels: 'Cargando modelos',

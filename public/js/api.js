@@ -101,9 +101,8 @@ export async function streamChat({ model, messages, settings, signal, onToken, o
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
+    buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+    if (done && buffer.trim()) buffer += '\n\n';
     const events = buffer.split('\n\n');
     buffer = events.pop() || '';
 
@@ -127,8 +126,14 @@ export async function streamChat({ model, messages, settings, signal, onToken, o
       if (token) onToken(token);
 
       if (data.choices?.[0]?.finish_reason) {
-        onComplete?.({ usage: data.usage, elapsedMs: data.elapsed_ms });
+        onComplete?.({
+          usage: data.usage,
+          elapsedMs: data.elapsed_ms,
+          finishReason: data.choices[0].finish_reason
+        });
       }
     }
+    if (done)
+      throw new ApiError('Response stream ended before completion.', { code: 'incomplete_stream' });
   }
 }

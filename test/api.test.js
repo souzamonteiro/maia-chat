@@ -112,6 +112,23 @@ test('streamChat forwards final usage metadata', async () => {
 
   assert.deepEqual(metadata, {
     usage: { prompt_tokens: 4, completion_tokens: 6, total_tokens: 10 },
+    finishReason: 'stop',
     elapsedMs: 1200
   });
+});
+
+test('streamChat preserves partial text but rejects premature EOF', async () => {
+  globalThis.fetch = async () =>
+    new Response('data: {"choices":[{"delta":{"content":"partial"}}]}');
+  const output = [];
+  await assert.rejects(
+    streamChat({ messages: [], onToken: (token) => output.push(token) }),
+    (error) => error.code === 'incomplete_stream'
+  );
+  assert.equal(output.join(''), 'partial');
+});
+
+test('streamChat accepts a final DONE without trailing newline', async () => {
+  globalThis.fetch = async () => new Response('data: [DONE]');
+  await streamChat({ messages: [], onToken() {} });
 });
