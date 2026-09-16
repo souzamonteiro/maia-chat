@@ -69,9 +69,10 @@ server:
   secret_key: 'REPLACE_WITH_A_RANDOM_SECRET'
   limiter: false
   public_instance: false
-formats:
-  - html
-  - json
+search:
+  formats:
+    - html
+    - json
 ```
 
 Use `sudoedit /etc/searxng/settings.yml` to create it. Then apply safe ownership and permissions:
