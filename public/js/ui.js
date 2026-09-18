@@ -29,3 +29,30 @@ export function createRecoveryNotice({ state, title, detail, actions }) {
   notice.append(text, actionList);
   return notice;
 }
+
+export function createRagSources(sources, translate) {
+  if (!Array.isArray(sources)) return null;
+  const valid = sources.filter((source) => source && typeof source.filename === 'string');
+  if (!valid.length) return null;
+  const section = createElement('section', {
+    className: 'rag-sources',
+    attributes: { 'aria-label': translate('ragSources') }
+  });
+  section.append(createElement('strong', { text: translate('ragSources') }));
+  const list = createElement('ul');
+  for (const source of valid) {
+    const location =
+      Number.isInteger(source.startLine) && Number.isInteger(source.endLine)
+        ? translate('ragLines', { start: source.startLine, end: source.endLine })
+        : Number.isInteger(source.chunk)
+          ? translate('ragChunk', { number: source.chunk })
+          : '';
+    list.append(
+      createElement('li', {
+        text: `${source.filename}${location ? ` — ${location}` : ''}`
+      })
+    );
+  }
+  section.append(list);
+  return section;
+}

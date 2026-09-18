@@ -127,6 +127,7 @@ export async function streamChat({ model, messages, settings, signal, onToken, o
 
       if (data.choices?.[0]?.finish_reason) {
         onComplete?.({
+          ...(Array.isArray(data.rag_sources) ? { ragSources: data.rag_sources } : {}),
           usage: data.usage,
           elapsedMs: data.elapsed_ms,
           finishReason: data.choices[0].finish_reason

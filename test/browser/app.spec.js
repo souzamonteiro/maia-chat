@@ -245,3 +245,28 @@ test('failed streaming response preserves partial output and offers Retry', asyn
   ).toBeVisible();
   await expect(page.locator('.message.user .message-content')).toContainText('Keep my prompt');
 });
+
+test('RAG sources appear without generated citations and survive reload', async ({ page }) => {
+  await mockApi(page);
+  await page.route('**/api/chat/completions', (route) =>
+    route.fulfill({
+      contentType: 'text/event-stream; charset=utf-8',
+      body: `data: ${JSON.stringify({
+        choices: [{ delta: { content: 'Answer without citations.' }, finish_reason: 'stop' }],
+        rag_sources: [
+          { filename: 'manual.md', startLine: 4, endLine: 12 },
+          { filename: 'notes.txt', chunk: 2 }
+        ]
+      })}\n\ndata: [DONE]\n\n`
+    })
+  );
+  await page.goto('/');
+  await page.locator('#prompt').fill('Explain the indexed document');
+  await page.locator('#sendButton').click();
+  const sources = page.locator('.message.assistant .rag-sources');
+  await expect(sources).toContainText('Sources provided to the model');
+  await expect(sources).toContainText('manual.md — lines 4–12');
+  await expect(sources).toContainText('notes.txt — chunk 2');
+  await page.reload();
+  await expect(sources).toContainText('manual.md — lines 4–12');
+});

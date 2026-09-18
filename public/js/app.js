@@ -6,7 +6,7 @@ import {
   searchWeb,
   ApiError,
   streamChat
-} from './api.js?v=2';
+} from './api.js?v=3';
 import { conversationStorage } from './storage.js';
 import { contextUsage } from './context.js';
 import {
@@ -36,8 +36,8 @@ import {
   searchConversations
 } from './conversations.js';
 import { renderMarkdown } from './markdown.js?v=2';
-import { applyTranslations, translate } from './i18n.js?v=3';
-import { createButton, createElement, createRecoveryNotice } from './ui.js?v=1';
+import { applyTranslations, translate } from './i18n.js?v=4';
+import { createButton, createElement, createRecoveryNotice, createRagSources } from './ui.js?v=2';
 
 const elements = {
   chat: document.querySelector('#chat'),
@@ -360,6 +360,11 @@ function messageElement(message, conversation, index) {
 
   article.append(role, content);
 
+  if (message.role === 'assistant') {
+    const references = createRagSources(message.ragSources, t);
+    if (references) content.append(references);
+  }
+
   if (message.metrics) {
     const metrics = document.createElement('div');
     metrics.className = 'message-metrics';
@@ -590,7 +595,8 @@ async function generateResponse(conversation, assistantMessage, requestMessages)
         if (rendered) renderMessageContent(rendered, assistantMessage.content);
         elements.chat.scrollTop = elements.chat.scrollHeight;
       },
-      onComplete({ usage, elapsedMs, finishReason }) {
+      onComplete({ usage, elapsedMs, finishReason, ragSources }) {
+        assistantMessage.ragSources = ragSources || [];
         assistantMessage.finishReason = finishReason;
         const duration = elapsedMs ?? Math.round(performance.now() - startedAt);
         const completionTokens = usage?.completion_tokens ?? 0;

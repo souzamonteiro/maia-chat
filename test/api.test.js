@@ -132,3 +132,23 @@ test('streamChat accepts a final DONE without trailing newline', async () => {
   globalThis.fetch = async () => new Response('data: [DONE]');
   await streamChat({ messages: [], onToken() {} });
 });
+
+test('streamChat delivers RAG sources independently of model citations', async () => {
+  const sources = [{ filename: 'manual.md', chunk: 2 }];
+  globalThis.fetch = async () =>
+    new Response(
+      `data: ${JSON.stringify({
+        choices: [{ delta: { content: 'Answer without a citation.' }, finish_reason: 'stop' }],
+        rag_sources: sources
+      })}\n\ndata: [DONE]\n\n`
+    );
+  let metadata;
+  await streamChat({
+    messages: [],
+    onToken() {},
+    onComplete(value) {
+      metadata = value;
+    }
+  });
+  assert.deepEqual(metadata.ragSources, sources);
+});

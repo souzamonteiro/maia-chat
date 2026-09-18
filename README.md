@@ -623,3 +623,8 @@ failures produce `rag_unavailable`, so users can retry. Set
 API responses include `rag_sources` metadata with the references included in
 the prompt, in the completion object or final SSE chunk. This describes the
 provided evidence, not a guarantee that every source was cited by the model.
+
+The web chat displays **Sources provided to the model** below each new response
+with retrieved references, independently of citations written by the model.
+Filenames and line/chunk locations are saved with the browser-local history.
+Existing responses without saved source metadata cannot be backfilled.

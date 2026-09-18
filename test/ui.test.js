@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 
-import { createButton, createRecoveryNotice } from '../public/js/ui.js';
+import { createButton, createRecoveryNotice, createRagSources } from '../public/js/ui.js';
 
 function withDocument(run) {
   const { window } = new JSDOM('');
@@ -54,5 +54,30 @@ test('createRecoveryNotice composes a semantic recovery state with supplied acti
     assert.equal(notice.querySelector('strong').textContent, 'Response interrupted');
     assert.equal(notice.querySelector('.message-error span').textContent, 'Try again.');
     assert.equal(notice.querySelector('.message-actions button'), retry);
+  });
+});
+
+test('RAG sources render as plain text, with locations and no injected markup', () => {
+  withDocument(() => {
+    const translate = (key, params) =>
+      key === 'ragSources'
+        ? 'Fontes fornecidas ao modelo'
+        : key === 'ragLines'
+          ? `linhas ${params.start}–${params.end}`
+          : `trecho ${params.number}`;
+    const section = createRagSources(
+      [
+        { filename: '<img src=x onerror=alert(1)>', startLine: 3, endLine: 9 },
+        { filename: 'manual.md', chunk: 2 },
+        null
+      ],
+      translate
+    );
+    assert.match(section.textContent, /linhas 3–9/);
+    assert.match(section.textContent, /manual.md — trecho 2/);
+    assert.equal(section.querySelector('img'), null);
+    assert.equal(section.querySelectorAll('li').length, 2);
+    assert.equal(createRagSources([], translate), null);
+    assert.equal(createRagSources(undefined, translate), null);
   });
 });

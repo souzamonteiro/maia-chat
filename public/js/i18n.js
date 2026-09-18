@@ -1,5 +1,8 @@
 const translations = {
   en: {
+    ragSources: 'Sources provided to the model',
+    ragLines: 'lines {start}–{end}',
+    ragChunk: 'chunk {number}',
     language: 'Language',
     theme: 'Theme',
     system: 'System',
@@ -80,6 +83,9 @@ const translations = {
     shortcutHint: 'Enter to send · Shift+Enter for a new line'
   },
   pt: {
+    ragSources: 'Fontes fornecidas ao modelo',
+    ragLines: 'linhas {start}–{end}',
+    ragChunk: 'trecho {number}',
     language: 'Idioma',
     theme: 'Tema',
     system: 'Sistema',
@@ -160,6 +166,9 @@ const translations = {
     shortcutHint: 'Enter para enviar · Shift+Enter para nova linha'
   },
   es: {
+    ragSources: 'Fuentes proporcionadas al modelo',
+    ragLines: 'líneas {start}–{end}',
+    ragChunk: 'fragmento {number}',
     language: 'Idioma',
     theme: 'Tema',
     system: 'Sistema',

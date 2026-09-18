@@ -15,7 +15,7 @@ fi
 BACKUP_DIR="$(mktemp -d /srv/maia/maia-chat-rag-backup-XXXXXXXX)"
 chmod 0700 "$BACKUP_DIR"
 cp -a "$APP_DIR/.env" "$BACKUP_DIR/.env"
-for relative in server/config.js server/config-validation.js server/routes/chat.js server/rag.js; do
+for relative in server/config.js server/config-validation.js server/routes/chat.js server/rag.js public/js/api.js public/js/app.js public/js/ui.js public/js/i18n.js public/index.html; do
   mkdir -p "$BACKUP_DIR/$(dirname "$relative")"
   if [[ -f "$APP_DIR/$relative" ]]; then
     cp -a "$APP_DIR/$relative" "$BACKUP_DIR/$relative"
