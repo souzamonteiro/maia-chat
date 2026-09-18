@@ -11,6 +11,9 @@ const positiveIntegers = [
   'generationQueueTimeoutMs',
   'rateLimitWindowMs',
   'rateLimitMaxRequests',
+  'ragTimeoutMs',
+  'ragTopK',
+  'ragMaxContextChars',
   'searchTimeoutMs',
   'searchMaxResults',
   'shutdownTimeoutMs',
@@ -55,6 +58,24 @@ export function validateConfiguration(config) {
       if (!['http:', 'https:'].includes(url.protocol)) throw new Error('unsupported protocol');
     } catch {
       throw new Error('MAIA_SEARXNG_URL must be a valid http:// or https:// URL.');
+    }
+  }
+
+  if (config.ragEnabled) {
+    try {
+      const url = new URL(config.ragUrl);
+      if (
+        !['http:', 'https:'].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash
+      )
+        throw new Error('invalid URL');
+    } catch {
+      throw new Error(
+        'MAIA_RAG_URL must be a valid http:// or https:// URL without credentials, query or fragment.'
+      );
     }
   }
 

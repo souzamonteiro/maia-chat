@@ -80,3 +80,25 @@ test('validateConfiguration rejects a blacklisted default model', () => {
 
   assert.throws(() => validateConfiguration(invalid), /MAIA_DEFAULT_MODEL/);
 });
+
+test('validateConfiguration validates enabled RAG URLs and retrieval limits', () => {
+  for (const ragUrl of [
+    'file:///tmp/rag',
+    'http://user:secret@localhost:4310',
+    'http://localhost:4310?x=1'
+  ]) {
+    assert.throws(
+      () => validateConfiguration({ ...validConfig(), ragEnabled: true, ragUrl }),
+      /MAIA_RAG_URL/
+    );
+  }
+  assert.throws(() => validateConfiguration({ ...validConfig(), ragTopK: 0 }), /ragTopK/);
+  assert.throws(
+    () => validateConfiguration({ ...validConfig(), ragTimeoutMs: -1 }),
+    /ragTimeoutMs/
+  );
+  assert.throws(
+    () => validateConfiguration({ ...validConfig(), ragMaxContextChars: 0 }),
+    /ragMaxContextChars/
+  );
+});

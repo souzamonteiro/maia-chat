@@ -1,3 +1,4 @@
+import { augmentWithKnowledge } from '../rag.js';
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { chatCompletion } from '../providers/ollama.js';
@@ -82,8 +83,22 @@ chatRouter.post('/', async (req, res, next) => {
       res.set('Retry-After', '5');
       return next(error);
     }
+    const controller = new AbortController();
+    const cancel = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    res.on('close', cancel);
+    if (res.destroyed) controller.abort();
     try {
-      const result = await chatCompletion({ ...body, stream: false });
+      const enriched = await augmentWithKnowledge(body, {
+        inputTokens,
+        outputTokens,
+        signal: controller.signal
+      });
+      const result = await chatCompletion(
+        { ...body, messages: enriched.messages, stream: false },
+        { signal: controller.signal }
+      );
 
       recordGeneration({
         success: true,
@@ -105,6 +120,7 @@ chatRouter.post('/', async (req, res, next) => {
       return res.json({
         id,
         object: 'chat.completion',
+        ...(config.ragEnabled ? { rag_sources: enriched.sources } : {}),
         created,
         model: result.model,
         choices: [
@@ -135,6 +151,7 @@ chatRouter.post('/', async (req, res, next) => {
       });
       return next(error);
     } finally {
+      res.off('close', cancel);
       releaseGeneration(clientId);
     }
   }
@@ -174,8 +191,13 @@ chatRouter.post('/', async (req, res, next) => {
   let firstTokenAt = null;
 
   try {
+    const enriched = await augmentWithKnowledge(body, {
+      inputTokens,
+      outputTokens,
+      signal: controller.signal
+    });
     const result = await chatCompletion(
-      { ...body, stream: true },
+      { ...body, messages: enriched.messages, stream: true },
       {
         signal: controller.signal,
         onChunk: (chunk) => {
@@ -213,6 +235,7 @@ chatRouter.post('/', async (req, res, next) => {
         total_tokens: result.promptEvalCount + result.evalCount
       },
       elapsed_ms: Date.now() - startedAt,
+      ...(config.ragEnabled ? { rag_sources: enriched.sources } : {}),
       choices: [
         {
           index: 0,

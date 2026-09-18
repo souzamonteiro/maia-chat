@@ -579,3 +579,47 @@ system prompt, tool definitions, and reserved output. This character-based estim
 is not an exact tokenizer and cannot guarantee that Ollama retains every input
 token. Attached documents use retrieval: selected chunks, rather than every page,
 are included in the prompt.
+
+## Shared knowledge with Maia RAG
+
+Maia Chat can automatically retrieve relevant document chunks from a running
+Maia RAG service before generating each answer. Enable it in the **Maia Chat**
+`.env` (production: `/srv/maia/maia-chat/.env`):
+
+```env
+MAIA_RAG_ENABLED=true
+MAIA_RAG_URL=http://127.0.0.1:4310
+MAIA_RAG_COLLECTION_ID=
+MAIA_RAG_TIMEOUT_MS=30000
+MAIA_RAG_TOP_K=4
+MAIA_RAG_MAX_CONTEXT_CHARS=8000
+```
+
+For an existing native installation, deploy this integration and enable it with
+`sudo bash scripts/enable-rag.sh`. The script backs up the replaced files and
+production `.env`, preserves an existing RAG URL/collection, and restarts the chat
+service. No dependency changes are needed.
+
+Restart `maia-chat` after subsequent configuration changes. The RAG
+URL is the service root, without `/api`. Only the chat server accesses it;
+no public RAG endpoint or browser credentials are required.
+
+When enabled, retrieval applies to both the web chat and `/v1/chat/completions`.
+All chat users can receive information from the configured knowledge base.
+An empty collection ID searches all documents; set `MAIA_RAG_COLLECTION_ID`
+to restrict retrieval to one shared collection. This is a deployment-wide
+setting, not per-user access control. Document ingestion and management remain
+in Maia RAG; browser-local attachments and collections continue to work.
+
+The latest user message is sent to `/api/search`. Retrieved chunks are treated
+as untrusted references and the model is instructed to cite filenames and line
+numbers (or chunk numbers). The selected chat model generates the answer with
+its existing history and streaming behavior. Complete chunks that do not fit
+the configured retrieval or remaining context budget are skipped; existing
+messages are never truncated. Empty results continue as normal chat. Retrieval
+failures produce `rag_unavailable`, so users can retry. Set
+`MAIA_RAG_ENABLED=false` and restart to disable integration.
+
+API responses include `rag_sources` metadata with the references included in
+the prompt, in the completion object or final SSE chunk. This describes the
+provided evidence, not a guarantee that every source was cited by the model.
